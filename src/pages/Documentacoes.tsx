@@ -21,7 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { documentacaoService } from '../services/api';
 import { clienteService } from '../services/api';
 import { RefreshButton } from '../components/RefreshButton';
-import { useAutoRefresh } from '../hooks/useAutoRefresh';
+
 
 const Documentacoes: React.FC = () => {
   const { user } = useAuth();
@@ -59,7 +59,7 @@ const Documentacoes: React.FC = () => {
   );
 
   // Buscar documentações
-  const { data: documentacoes = [], isLoading, error } = useQuery(
+  const { data: documentacoes = [], isLoading } = useQuery(
     ['documentacoes', selectedClienteId, statusFilter, tipoFilter],
     () => documentacaoService.list(
       selectedClienteId ? Number(selectedClienteId) : undefined,
