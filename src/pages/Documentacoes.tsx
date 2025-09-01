@@ -1073,10 +1073,7 @@ const DocumentacaoForm: React.FC<DocumentacaoFormProps> = ({ documentacao, isAdm
           return;
         }
 
-        console.log('Arquivo selecionado:', arquivo);
-        console.log('FormData antes de enviar:', formData);
-        console.log('isAdmin:', isAdmin);
-        console.log('selectedClienteId:', selectedClienteId);
+
         
         // Preparar dados para envio
         const dataToSend: any = {
@@ -1107,7 +1104,7 @@ const DocumentacaoForm: React.FC<DocumentacaoFormProps> = ({ documentacao, isAdm
           dataToSend.cliente_id = selectedClienteId.toString();
         }
 
-        console.log('Dados preparados para envio:', dataToSend);
+
 
         await createMutation.mutateAsync(dataToSend);
       }

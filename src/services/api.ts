@@ -70,7 +70,7 @@ export const authService = {
       const response = await api.get('/auth/me');
       return response.status === 200;
     } catch (error) {
-      console.log('Token inválido ou expirado');
+
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       return false;
@@ -295,13 +295,7 @@ export const documentacaoService = {
     
     const token = localStorage.getItem('token');
     
-    console.log('Token sendo usado:', token);
-    console.log('Dados recebidos:', data);
-    console.log('FormData criado:', formData);
-    console.log('FormData entries:');
-    for (let [key, value] of formData.entries()) {
-      console.log(`${key}:`, value);
-    }
+
     
     // Criar uma instância específica do Axios para esta requisição
     const uploadApi = axios.create({
@@ -315,9 +309,6 @@ export const documentacaoService = {
     }
 
     const response = await uploadApi.post('/documentacoes/', formData);
-    
-    console.log('Response status:', response.status);
-    console.log('Success response:', response.data);
     
     return response.data;
   },
