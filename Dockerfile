@@ -21,7 +21,7 @@ RUN npm install --production=false && npm cache clean --force
 COPY . .
 
 # Build da aplicação
-RUN npm run build
+RUN npm run build && ls -la dist/
 
 # Stage de produção
 FROM docker.io/library/nginx:alpine

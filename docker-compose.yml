@@ -9,6 +9,8 @@ services:
     environment:
       - VITE_API_URL=http://localhost:8100
       - VITE_APP_NAME=Sistema de Gerenciamento para Licitações
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3100:80"
     networks:

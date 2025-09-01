@@ -158,7 +158,10 @@ const Documentacoes: React.FC = () => {
 
   const handleDownloadHabilitacao = async () => {
     try {
-      await documentacaoService.downloadHabilitacao();
+      // Se for admin e tiver cliente selecionado, usar esse cliente
+      // Se não for admin, usar o cliente vinculado ao usuário
+      const clienteId = isAdmin && selectedClienteId ? Number(selectedClienteId) : undefined;
+      await documentacaoService.downloadHabilitacao(clienteId);
       toast.success('Download iniciado com sucesso!');
     } catch (error) {
       toast.error('Erro ao fazer download da habilitação');
@@ -1017,7 +1020,7 @@ const DocumentacaoForm: React.FC<DocumentacaoFormProps> = ({ documentacao, isAdm
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const createMutation = useMutation(
-    (formData: FormData) => documentacaoService.create(formData),
+    (data: any) => documentacaoService.create(data),
     {
       onSuccess: () => {
         toast.success('Documentação criada com sucesso');
@@ -1070,34 +1073,43 @@ const DocumentacaoForm: React.FC<DocumentacaoFormProps> = ({ documentacao, isAdm
           return;
         }
 
-        const formDataToSend = new FormData();
+        console.log('Arquivo selecionado:', arquivo);
+        console.log('FormData antes de enviar:', formData);
+        console.log('isAdmin:', isAdmin);
+        console.log('selectedClienteId:', selectedClienteId);
+        
+        // Preparar dados para envio
+        const dataToSend: any = {
+          tipo_documento: formData.tipo_documento,
+          arquivo: arquivo
+        };
+        
         // Só envia o título se foi preenchido
         if (formData.titulo && formData.titulo.trim() !== '') {
-          formDataToSend.append('titulo', formData.titulo);
+          dataToSend.titulo = formData.titulo;
         }
         if (formData.descricao) {
-          formDataToSend.append('descricao', formData.descricao);
+          dataToSend.descricao = formData.descricao;
         }
         
         // Adicionar data de emissão se fornecida
         if (formData.data_emissao) {
-          formDataToSend.append('data_emissao', formData.data_emissao);
+          dataToSend.data_emissao = formData.data_emissao;
         }
         
         // Enviar data de validade se fornecida (permitir para documentos de identidade)
         if (formData.data_validade) {
-          formDataToSend.append('data_validade', formData.data_validade);
+          dataToSend.data_validade = formData.data_validade;
         }
-        
-        formDataToSend.append('tipo_documento', formData.tipo_documento);
-        formDataToSend.append('arquivo', arquivo);
         
         // Adicionar cliente_id se for admin e tiver um cliente selecionado
         if (isAdmin && selectedClienteId) {
-          formDataToSend.append('cliente_id', selectedClienteId.toString());
+          dataToSend.cliente_id = selectedClienteId.toString();
         }
 
-        await createMutation.mutateAsync(formDataToSend);
+        console.log('Dados preparados para envio:', dataToSend);
+
+        await createMutation.mutateAsync(dataToSend);
       }
     } finally {
       setIsSubmitting(false);

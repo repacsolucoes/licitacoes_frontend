@@ -3,12 +3,8 @@ import { LoginCredentials, AuthResponse, User, Cliente, Licitacao, DashboardStat
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
-
 const api = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
   timeout: 10000, // 10 segundos de timeout
 });
 
@@ -18,6 +14,12 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
+  // Adicionar Content-Type apenas se não for FormData
+  if (!(config.data instanceof FormData) && !config.headers['Content-Type']) {
+    config.headers['Content-Type'] = 'application/json';
+  }
+  
   return config;
 });
 
@@ -26,11 +28,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Verificar se é um erro de autenticação real ou temporário
-      const token = localStorage.getItem('token');
-      if (!token) {
-        window.location.href = '/login';
-      }
+      // Token expirado ou inválido - redirecionar para login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
@@ -56,6 +57,24 @@ export const authService = {
   getCurrentUser: async (): Promise<User> => {
     const response = await api.get('/auth/me');
     return response.data;
+  },
+
+  // Função para verificar se o token ainda é válido
+  checkTokenValidity: async (): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        return false;
+      }
+      
+      const response = await api.get('/auth/me');
+      return response.status === 200;
+    } catch (error) {
+      console.log('Token inválido ou expirado');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      return false;
+    }
   },
 };
 
@@ -118,39 +137,30 @@ export const clienteService = {
     return response.data;
   },
 
-  moverArquivos: async (): Promise<{ message: string; movidas: number; total_processadas: number }> => {
-    const response = await api.post('/clientes/mover-arquivos');
+  criarEstruturaPastasTodosClientes: async (): Promise<{ message: string; criados: number; total_processados: number }> => {
+    const response = await api.post('/clientes/criar-estrutura-pastas-todos-clientes');
     return response.data;
   },
 };
 
 // Serviços de licitações
 export const licitacaoService = {
-  list: async (params?: {
-    search?: string;
-    status_filter?: string;
-    cliente_id?: number;
-    data_inicio?: string;
-    data_fim?: string;
-    sem_pedidos?: boolean;
-  }): Promise<Licitacao[]> => {
-
+  list: async (status?: string, clienteId?: number): Promise<Licitacao[]> => {
+    const params: any = {};
+    if (status) params.status = status;
+    if (clienteId) params.cliente_id = clienteId;
     
-    try {
-      const response = await api.get('/licitacoes/', { params });
-      return response.data;
-    } catch (error: any) {
-      throw error;
-    }
-  },
-
-  create: async (licitacao: Omit<Licitacao, 'id' | 'indice' | 'user_criador_id' | 'created_at' | 'updated_at' | 'cliente' | 'user_criador'>): Promise<Licitacao> => {
-    const response = await api.post('/licitacoes/', licitacao);
+    const response = await api.get('/licitacoes/', { params });
     return response.data;
   },
 
   get: async (id: number): Promise<Licitacao> => {
     const response = await api.get(`/licitacoes/${id}`);
+    return response.data;
+  },
+
+  create: async (licitacao: Omit<Licitacao, 'id' | 'created_at' | 'updated_at'>): Promise<Licitacao> => {
+    const response = await api.post('/licitacoes/', licitacao);
     return response.data;
   },
 
@@ -163,40 +173,18 @@ export const licitacaoService = {
     await api.delete(`/licitacoes/${id}`);
   },
 
-  atualizarApi: async (id: number): Promise<{ message: string }> => {
-    const response = await api.post(`/licitacoes/${id}/atualizar-api`);
-    return response.data;
-  },
-
-  atualizarTodasApi: async (): Promise<{ atualizadas: number; erros: number; total: number }> => {
-    const response = await api.post('/licitacoes/atualizar-todas-api');
-    return response.data;
-  },
-
   getDashboardStats: async (clienteId?: number): Promise<DashboardStats> => {
     const params = clienteId ? { cliente_id: clienteId } : {};
     const response = await api.get('/licitacoes/dashboard/stats', { params });
     return response.data;
   },
 
-  // Novos métodos para relatórios
-  getRelatorioPorCliente: async (clienteId?: number): Promise<any[]> => {
-    const params = clienteId ? { cliente_id: clienteId } : {};
-    const response = await api.get('/licitacoes/relatorios/por-cliente', { params });
-    return response.data;
-  },
-
-  getRelatorioPorStatus: async (clienteId?: number): Promise<any[]> => {
-    const params = clienteId ? { cliente_id: clienteId } : {};
-    const response = await api.get('/licitacoes/relatorios/por-status', { params });
-    return response.data;
-  },
-
-  getEstatisticasGerais: async (clienteId?: number, pedidoId?: number): Promise<any> => {
+  getRelatorioFinanceiro: async (clienteId?: number, pedidoId?: number): Promise<any> => {
     const params: any = {};
     if (clienteId) params.cliente_id = clienteId;
     if (pedidoId) params.pedido_id = pedidoId;
-    const response = await api.get('/licitacoes/relatorios/estatisticas-gerais', { params });
+    
+    const response = await api.get('/licitacoes/relatorios/financeiro', { params });
     return response.data;
   },
 
@@ -275,12 +263,62 @@ export const documentacaoService = {
     return response.data;
   },
 
-  create: async (formData: FormData): Promise<Documentacao> => {
-    const response = await api.post('/documentacoes', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+  create: async (data: {
+    titulo?: string;
+    descricao?: string;
+    data_validade?: string;
+    data_emissao?: string;
+    tipo_documento: string;
+    arquivo: File;
+    cliente_id?: string;
+  }): Promise<Documentacao> => {
+    // Criar FormData diretamente no serviço
+    const formData = new FormData();
+    
+    if (data.titulo) {
+      formData.append('titulo', data.titulo);
+    }
+    if (data.descricao) {
+      formData.append('descricao', data.descricao);
+    }
+    if (data.data_validade) {
+      formData.append('data_validade', data.data_validade);
+    }
+    if (data.data_emissao) {
+      formData.append('data_emissao', data.data_emissao);
+    }
+    formData.append('tipo_documento', data.tipo_documento);
+    formData.append('arquivo', data.arquivo);
+    if (data.cliente_id) {
+      formData.append('cliente_id', data.cliente_id);
+    }
+    
+    const token = localStorage.getItem('token');
+    
+    console.log('Token sendo usado:', token);
+    console.log('Dados recebidos:', data);
+    console.log('FormData criado:', formData);
+    console.log('FormData entries:');
+    for (let [key, value] of formData.entries()) {
+      console.log(`${key}:`, value);
+    }
+    
+    // Criar uma instância específica do Axios para esta requisição
+    const uploadApi = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: 30000,
     });
+
+    // Adicionar token
+    if (token) {
+      uploadApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await uploadApi.post('/documentacoes/', formData);
+    
+    console.log('Response status:', response.status);
+    console.log('Success response:', response.data);
+    
     return response.data;
   },
 
@@ -318,8 +356,12 @@ export const documentacaoService = {
     return response.data;
   },
 
-  downloadHabilitacao: async (): Promise<void> => {
+  downloadHabilitacao: async (clienteId?: number): Promise<void> => {
+    const params: any = {};
+    if (clienteId) params.cliente_id = clienteId;
+    
     const response = await api.get('/documentacoes/download-habilitacao', {
+      params,
       responseType: 'blob',
     });
     

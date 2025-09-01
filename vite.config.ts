@@ -29,6 +29,8 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 1000,
+    cssCodeSplit: true,
+    sourcemap: false,
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'axios', 'date-fns'],
