@@ -374,20 +374,69 @@ export const documentacaoService = {
     const params: any = {};
     if (clienteId) params.cliente_id = clienteId;
     
-    const response = await api.get('/documentacoes/download-habilitacao', {
-      params,
-      responseType: 'blob',
-    });
-    
-    // Criar link para download
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'Habilitação.zip');
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+    try {
+      console.log('Iniciando download de habilitação...');
+      
+      // Usar timeout maior para downloads de arquivos grandes
+      const response = await api.get('/documentacoes/download-habilitacao', {
+        params,
+        responseType: 'blob',
+        timeout: 30000, // 30 segundos para downloads
+      });
+      
+      console.log('Resposta recebida:', response);
+      console.log('Tipo da resposta:', typeof response.data);
+      console.log('Tamanho da resposta:', response.data?.size || 'N/A');
+      
+      // Verificar se a resposta é válida
+      if (!response.data || response.data.size === 0) {
+        throw new Error('Resposta vazia ou inválida do servidor');
+      }
+      
+      // Criar Blob com o tipo correto
+      const blob = new Blob([response.data], { 
+        type: 'application/zip' 
+      });
+      
+      console.log('Blob criado:', blob);
+      console.log('Tamanho do Blob:', blob.size);
+      
+      // Criar URL para o Blob
+      const url = window.URL.createObjectURL(blob);
+      console.log('URL criada:', url);
+      
+      // Criar elemento de link para download
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'Habilitação.zip');
+      link.style.display = 'none';
+      
+      // Adicionar ao DOM, clicar e remover
+      document.body.appendChild(link);
+      link.click();
+      
+      // Aguardar um pouco antes de limpar
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        console.log('Download concluído e recursos limpos');
+      }, 100);
+      
+    } catch (error: any) {
+      console.error('Erro no download:', error);
+      
+      // Tratamento específico para timeout
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Download cancelado por timeout. O arquivo é muito grande. Tente novamente.');
+      }
+      
+      // Tratamento para outros erros
+      if (error.response?.status === 500) {
+        throw new Error('Erro interno do servidor. Tente novamente mais tarde.');
+      }
+      
+      throw new Error(`Erro no download: ${error.message || 'Erro desconhecido'}`);
+    }
   },
 
   moverAtestadosCapacidade: async (): Promise<{ message: string; movidas: number; total_processadas: number }> => {

@@ -1038,61 +1038,83 @@ const Relatorios: React.FC = () => {
           <div className="p-4 bg-gray-50 rounded-lg">
             <h4 className="font-medium text-gray-900 mb-2">Tendência de Performance</h4>
             <p className="text-sm text-gray-600">Gráfico de linha mostrando evolução ao longo do tempo</p>
-                         {tendenciaPerformance && tendenciaPerformance.length > 0 ? (
-               <ResponsiveContainer width="100%" height={300}>
-                 <LineChart data={tendenciaPerformance}>
-                   <CartesianGrid strokeDasharray="3 3" />
-                   <XAxis dataKey="mes" tickFormatter={formatMonth} />
-                   <YAxis />
-                   <Tooltip 
-                     formatter={(value: any, name: string) => [
-                       name === 'total_licitacoes' ? value : name === 'licitacoes_ganhas' ? value : formatCurrency(Number(value)),
-                       name === 'total_licitacoes' ? 'Total' : name === 'licitacoes_ganhas' ? 'Ganhas' : 'Valor Ganho'
-                     ]}
-                   />
-                   <Line type="monotone" dataKey="total_licitacoes" stroke="#8884D8" name="Total de Licitações" />
-                   <Line type="monotone" dataKey="licitacoes_ganhas" stroke="#82CA9D" name="Licitações Ganhas" />
-                 </LineChart>
-               </ResponsiveContainer>
-             ) : (
-               <div className="text-center py-8">
-                 <p className="text-gray-500">Nenhum dado disponível para o período selecionado</p>
-               </div>
-             )}
+            {tendenciaPerformance && tendenciaPerformance.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={tendenciaPerformance}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="mes" tickFormatter={formatMonth} />
+                  <YAxis />
+                  <Tooltip 
+                    formatter={(value: any, name: string) => [
+                      name === 'total_licitacoes' ? value : name === 'licitacoes_ganhas' ? value : formatCurrency(Number(value)),
+                      name === 'total_licitacoes' ? 'Total' : name === 'licitacoes_ganhas' ? 'Ganhas' : 'Valor Ganho'
+                    ]}
+                  />
+                  <Line type="monotone" dataKey="total_licitacoes" stroke="#8884D8" name="Total de Licitações" />
+                  <Line type="monotone" dataKey="licitacoes_ganhas" stroke="#82CA9D" name="Licitações Ganhas" />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center py-8">
+                {isAdmin && selectedClienteId ? (
+                  <div>
+                    <p className="text-gray-600 mb-2">
+                      O cliente selecionado não possui licitações cadastradas.
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Selecione outro cliente ou crie licitações para este cliente.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500">Nenhum dado disponível para o período selecionado</p>
+                )}
+              </div>
+            )}
           </div>
           
           <div className="p-4 bg-gray-50 rounded-lg">
             <h4 className="font-medium text-gray-900 mb-2">Distribuição por Portal</h4>
             <p className="text-sm text-gray-600">Gráfico de pizza mostrando distribuição por portal</p>
-                         {distribuicaoPortal && distribuicaoPortal.length > 0 ? (
-               <ResponsiveContainer width="100%" height={300}>
-                 <RechartsPieChart>
-                   <Pie
-                     data={distribuicaoPortal}
-                     cx="50%"
-                     cy="50%"
-                     outerRadius={120}
-                     fill="#8884D8"
-                     label={({ portal, percentual }) => `${portal}: ${percentual.toFixed(1)}%`}
-                     dataKey="quantidade"
-                   >
-                     {distribuicaoPortal.map((_, index) => (
-                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                     ))}
-                   </Pie>
-                   <Tooltip 
-                     formatter={(value: any, _name: string, props: any) => [
-                       `${props.payload.portal}: ${value} licitações`,
-                       'Quantidade'
-                     ]}
-                   />
-                 </RechartsPieChart>
-               </ResponsiveContainer>
-             ) : (
-               <div className="text-center py-8">
-                 <p className="text-gray-500">Nenhum dado disponível</p>
-               </div>
-             )}
+            {distribuicaoPortal && distribuicaoPortal.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsPieChart>
+                  <Pie
+                    data={distribuicaoPortal}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={120}
+                    fill="#8884D8"
+                    label={({ portal, percentual }) => `${portal}: ${percentual.toFixed(1)}%`}
+                    dataKey="quantidade"
+                  >
+                    {distribuicaoPortal.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    formatter={(value: any, _name: string, props: any) => [
+                      `${props.payload.portal}: ${value} licitações`,
+                      'Quantidade'
+                    ]}
+                  />
+                </RechartsPieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center py-8">
+                {isAdmin && selectedClienteId ? (
+                  <div>
+                    <p className="text-gray-600 mb-2">
+                      O cliente selecionado não possui licitações cadastradas.
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Selecione outro cliente ou crie licitações para este cliente.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-gray-500">Nenhum dado disponível</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
