@@ -40,17 +40,18 @@ const Relatorios: React.FC = () => {
 
   const { data: stats } = useQuery(
     ['dashboard-stats', selectedClienteId], 
-    () => licitacaoService.getDashboardStats(selectedClienteId ? Number(selectedClienteId) : undefined)
+    () => licitacaoService.getDashboardStats(selectedClienteId ? Number(selectedClienteId) : undefined),
+    { staleTime: 30000 }
   );
   const { data: relatorioClientes } = useQuery(
     ['relatorio-clientes', selectedClienteId], 
     () => licitacaoService.getRelatorioPorCliente(selectedClienteId ? Number(selectedClienteId) : undefined),
-    { enabled: reportType === 'clients' }
+    { enabled: reportType === 'clients', staleTime: 30000 }
   );
   const { data: relatorioStatus } = useQuery(
     ['relatorio-status', selectedClienteId], 
     () => licitacaoService.getRelatorioPorStatus(selectedClienteId ? Number(selectedClienteId) : undefined),
-    { enabled: reportType === 'status' }
+    { enabled: reportType === 'status', staleTime: 30000 }
   );
   const { data: estatisticasGerais } = useQuery(
     ['estatisticas-gerais', selectedClienteId, selectedPedidoId], 
@@ -58,37 +59,50 @@ const Relatorios: React.FC = () => {
       selectedClienteId ? Number(selectedClienteId) : undefined,
       selectedPedidoId ? Number(selectedPedidoId) : undefined
     ),
-    { enabled: reportType === 'financial' || reportType === 'financial-detailed', refetchOnWindowFocus: false }
+    { enabled: reportType === 'financial', refetchOnWindowFocus: true, staleTime: 30000 }
+  );
+
+  // Relatório financeiro detalhado
+  const { data: relatorioFinanceiro } = useQuery(
+    ['relatorio-financeiro', selectedClienteId, selectedPedidoId], 
+    () => licitacaoService.getRelatorioFinanceiro(
+      selectedClienteId ? Number(selectedClienteId) : undefined,
+      selectedPedidoId ? Number(selectedPedidoId) : undefined
+    ),
+    { enabled: reportType === 'financial-detailed', refetchOnWindowFocus: true, staleTime: 30000 }
   );
 
   // Dados para gráficos
   const { data: tendenciaPerformance } = useQuery(
     ['tendencia-performance', selectedClienteId], 
-    () => licitacaoService.getTendenciaPerformance(selectedClienteId ? Number(selectedClienteId) : undefined)
+    () => licitacaoService.getTendenciaPerformance(selectedClienteId ? Number(selectedClienteId) : undefined),
+    { staleTime: 30000 }
   );
   const { data: distribuicaoPortal } = useQuery(
     ['distribuicao-portal', selectedClienteId], 
-    () => licitacaoService.getDistribuicaoPortal(selectedClienteId ? Number(selectedClienteId) : undefined)
+    () => licitacaoService.getDistribuicaoPortal(selectedClienteId ? Number(selectedClienteId) : undefined),
+    { staleTime: 30000 }
   );
 
   // Estatísticas de pedidos
   const { data: pedidosStats } = useQuery(
     ['pedidos-stats', selectedClienteId], 
-    () => pedidoService.getStats()
+    () => pedidoService.getStats(),
+    { staleTime: 30000 }
   );
 
   // Lista de todos os pedidos para filtro
   const { data: todosPedidos = [] } = useQuery(
     ['todos-pedidos', selectedClienteId], 
-    () => pedidoService.list(),
-    { enabled: reportType === 'financial' || reportType === 'financial-detailed' }
+    () => pedidoService.list(undefined, selectedClienteId ? Number(selectedClienteId) : undefined),
+    { enabled: reportType === 'financial' || reportType === 'financial-detailed', staleTime: 30000 }
   );
 
   // Relatório por modalidade
   const { data: relatorioModalidade } = useQuery(
     ['relatorio-modalidade', selectedClienteId], 
     () => licitacaoService.getRelatorioPorModalidade(selectedClienteId ? Number(selectedClienteId) : undefined),
-    { enabled: reportType === 'modalidade' }
+    { enabled: reportType === 'modalidade', staleTime: 30000 }
   );
 
   const formatCurrency = (value: number) => {
@@ -479,44 +493,49 @@ const Relatorios: React.FC = () => {
             )}
           </h3>
           
-          {estatisticasGerais && estatisticasGerais.total_licitacoes > 0 ? (
+          {relatorioFinanceiro && relatorioFinanceiro.total_pedidos > 0 ? (
             <>
               {/* Resumo Financeiro */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <DollarSign className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                  <p className="text-sm text-green-600 font-medium">Valor Total Ganho</p>
+                  <p className="text-sm text-green-600 font-medium">Valores a Receber</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {formatCurrency(estatisticasGerais?.valor_total_ganho || 0)}
+                    {formatCurrency(relatorioFinanceiro?.resumo?.total_valores_receber || 0)}
+                  </p>
+                </div>
+                
+                <div className="text-center p-4 bg-red-50 rounded-lg">
+                  <TrendingUp className="h-8 w-8 text-red-600 mx-auto mb-2" />
+                  <p className="text-sm text-red-600 font-medium">Valores a Pagar</p>
+                  <p className="text-2xl font-bold text-red-900">
+                    {formatCurrency(relatorioFinanceiro?.resumo?.total_valores_pagar || 0)}
                   </p>
                 </div>
                 
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <TrendingUp className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                  <p className="text-sm text-blue-600 font-medium">Margem Média</p>
+                  <Calendar className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                  <p className="text-sm text-blue-600 font-medium">Impostos e Taxas</p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {formatPercentage(estatisticasGerais?.margem_media || 0)}
+                    {formatCurrency(relatorioFinanceiro?.resumo?.total_impostos_taxas || 0)}
                   </p>
                 </div>
                 
                 <div className="text-center p-4 bg-purple-50 rounded-lg">
-                  <Calendar className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                  <p className="text-sm text-purple-600 font-medium">Valor Médio por Licitação</p>
+                  <BarChart3 className="h-8 w-8 text-purple-600 mx-auto mb-2" />
+                  <p className="text-sm text-purple-600 font-medium">Custos Produtos/Serviços</p>
                   <p className="text-2xl font-bold text-purple-900">
-                    {estatisticasGerais?.licitacoes_ganhas ? 
-                      formatCurrency(estatisticasGerais.valor_total_ganho / estatisticasGerais.licitacoes_ganhas) : 
-                      formatCurrency(0)
-                    }
+                    {formatCurrency(relatorioFinanceiro?.resumo?.total_custos_produtos || 0)}
                   </p>
                 </div>
-                
-                <div className="text-center p-4 bg-orange-50 rounded-lg">
-                  <BarChart3 className="h-8 w-8 text-orange-600 mx-auto mb-2" />
-                  <p className="text-sm text-orange-600 font-medium">Taxa de Sucesso</p>
-                  <p className="text-2xl font-bold text-orange-900">
-                    {formatPercentage(estatisticasGerais?.taxa_sucesso || 0)}
-                  </p>
-                </div>
+              </div>
+
+              {/* Lucro Líquido */}
+              <div className="text-center p-6 bg-gray-50 rounded-lg mb-8">
+                <h4 className="text-lg font-semibold text-gray-900 mb-2">Lucro Líquido</h4>
+                <p className={`text-3xl font-bold ${(relatorioFinanceiro?.resumo?.lucro_liquido || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(relatorioFinanceiro?.resumo?.lucro_liquido || 0)}
+                </p>
               </div>
 
               {/* Análise de Fluxo de Caixa Real */}
@@ -532,7 +551,7 @@ const Relatorios: React.FC = () => {
                         {pedidoFilter === 'especifico' ? 'Pedido Entregue (Aguardando Pagamento)' : 'Pedidos Entregues (Aguardando Pagamento)'}
                       </span>
                       <span className="font-semibold text-green-900">
-                        {formatCurrency(estatisticasGerais?.valor_pedidos_entregues || 0)}
+                        {formatCurrency(relatorioFinanceiro?.controle_recebimentos?.pedidos_entregues_aguardando || 0)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-white rounded-lg">
@@ -540,7 +559,7 @@ const Relatorios: React.FC = () => {
                         {pedidoFilter === 'especifico' ? 'Pedido Pago' : 'Pedidos Pagos'}
                       </span>
                       <span className="font-semibold text-green-900">
-                        {formatCurrency(estatisticasGerais?.valor_pedidos_pagos || 0)}
+                        {formatCurrency(relatorioFinanceiro?.controle_recebimentos?.pedidos_pagos || 0)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-white rounded-lg">
@@ -548,14 +567,14 @@ const Relatorios: React.FC = () => {
                         {pedidoFilter === 'especifico' ? 'Pedido com Pagamento Parcial' : 'Pedidos com Pagamento Parcial'}
                       </span>
                       <span className="font-semibold text-green-900">
-                        {formatCurrency(estatisticasGerais?.valor_pedidos_parciais || 0)}
+                        {formatCurrency(relatorioFinanceiro?.controle_recebimentos?.pedidos_pagamento_parcial || 0)}
                       </span>
                     </div>
                     <div className="border-t pt-3">
                       <div className="flex justify-between items-center">
                         <span className="text-lg font-semibold text-gray-900">Total a Receber</span>
                         <span className="text-lg font-bold text-green-900">
-                          {formatCurrency((estatisticasGerais?.valor_pedidos_entregues || 0) - (estatisticasGerais?.valor_pedidos_pagos || 0) - (estatisticasGerais?.valor_pedidos_parciais || 0))}
+                          {formatCurrency(relatorioFinanceiro?.controle_recebimentos?.total_a_receber || 0)}
                         </span>
                       </div>
                     </div>
@@ -571,20 +590,20 @@ const Relatorios: React.FC = () => {
                     <div className="flex justify-between items-center p-3 bg-white rounded-lg">
                       <span className="text-sm text-gray-700">Custo dos Produtos/Serviços</span>
                       <span className="font-semibold text-red-900">
-                        {formatCurrency(estatisticasGerais?.custo_total || 0)}
+                        {formatCurrency(relatorioFinanceiro?.custos_reais?.custo_produtos_servicos || 0)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-white rounded-lg">
                       <span className="text-sm text-gray-700">Imposto (0.02% do preço final)</span>
                       <span className="font-semibold text-red-900">
-                        {formatCurrency(estatisticasGerais?.imposto_total || 0)}
+                        {formatCurrency(relatorioFinanceiro?.custos_reais?.imposto || 0)}
                       </span>
                     </div>
                     <div className="border-t pt-3">
                       <div className="flex justify-between items-center">
                         <span className="text-lg font-semibold text-gray-900">Total de Custos Reais</span>
                         <span className="text-lg font-bold text-red-900">
-                          {formatCurrency((estatisticasGerais?.custo_total || 0) + (estatisticasGerais?.imposto_total || 0))}
+                          {formatCurrency(relatorioFinanceiro?.custos_reais?.total_custos_reais || 0)}
                         </span>
                       </div>
                     </div>
@@ -633,7 +652,7 @@ const Relatorios: React.FC = () => {
                   <div className="text-center">
                     <p className="text-sm text-gray-600 mb-1">Valor Total Ganho</p>
                     <p className="text-xl font-bold text-green-900">
-                      {formatCurrency(estatisticasGerais?.valor_total_ganho || 0)}
+                      {formatCurrency(relatorioFinanceiro?.resumo_financeiro?.valor_total_ganho || 0)}
                     </p>
                   </div>
                   <div className="text-center">
@@ -645,13 +664,13 @@ const Relatorios: React.FC = () => {
                   <div className="text-center">
                     <p className="text-sm text-gray-600 mb-1">Custos Reais</p>
                     <p className="text-xl font-bold text-red-900">
-                      {formatCurrency((estatisticasGerais?.custo_total || 0) + (estatisticasGerais?.imposto_total || 0))}
+                      {formatCurrency(relatorioFinanceiro?.resumo_financeiro?.custos_reais || 0)}
                     </p>
                   </div>
                   <div className="text-center">
                     <p className="text-sm text-gray-600 mb-1">Margem Real</p>
                     <p className="text-xl font-bold text-emerald-900">
-                      {formatCurrency((estatisticasGerais?.valor_total_ganho || 0) - (estatisticasGerais?.custo_total || 0) - (estatisticasGerais?.imposto_total || 0))}
+                      {formatCurrency(relatorioFinanceiro?.resumo_financeiro?.margem_real || 0)}
                     </p>
                   </div>
                 </div>
@@ -999,7 +1018,13 @@ const Relatorios: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                <p className="text-gray-600">Nenhum dado encontrado</p>
+                <div className="text-center py-12">
+                  <DollarSign className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg">Nenhum dado disponível</p>
+                  <p className="text-gray-400 text-sm mt-2">
+                    Não há pedidos para exibir o relatório financeiro detalhado
+                  </p>
+                </div>
               )}
             </div>
           )}

@@ -207,6 +207,27 @@ export const licitacaoService = {
     const response = await api.get('/licitacoes/relatorios/por-modalidade', { params });
     return response.data;
   },
+
+  getEstatisticasGerais: async (clienteId?: number, pedidoId?: number): Promise<any> => {
+    const params: any = {};
+    if (clienteId) params.cliente_id = clienteId;
+    if (pedidoId) params.pedido_id = pedidoId;
+    
+    const response = await api.get('/licitacoes/relatorios/estatisticas-gerais', { params });
+    return response.data;
+  },
+
+  getRelatorioPorCliente: async (clienteId?: number): Promise<any[]> => {
+    const params = clienteId ? { cliente_id: clienteId } : {};
+    const response = await api.get('/licitacoes/relatorios/por-cliente', { params });
+    return response.data;
+  },
+
+  getRelatorioPorStatus: async (clienteId?: number): Promise<any[]> => {
+    const params = clienteId ? { cliente_id: clienteId } : {};
+    const response = await api.get('/licitacoes/relatorios/por-status', { params });
+    return response.data;
+  },
 };
 
 export const pedidoService = {
