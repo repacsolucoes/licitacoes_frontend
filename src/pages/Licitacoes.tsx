@@ -54,8 +54,6 @@ const Licitacoes: React.FC = () => {
     () => licitacaoService.list({ 
       search: searchTerm || undefined,
       cliente_id: selectedClienteId || undefined,
-      data_inicio: dataInicio || undefined,
-      data_fim: dataFim || undefined,
       status_filter: statusFilter || undefined
     })
   );

@@ -145,10 +145,12 @@ export const clienteService = {
 
 // Serviços de licitações
 export const licitacaoService = {
-  list: async (status?: string, clienteId?: number): Promise<Licitacao[]> => {
+  list: async (filters?: { status_filter?: string, cliente_id?: number, sem_pedidos?: boolean, search?: string }): Promise<Licitacao[]> => {
     const params: any = {};
-    if (status) params.status = status;
-    if (clienteId) params.cliente_id = clienteId;
+    if (filters?.status_filter) params.status_filter = filters.status_filter;
+    if (filters?.cliente_id) params.cliente_id = filters.cliente_id;
+    if (filters?.sem_pedidos) params.sem_pedidos = filters.sem_pedidos;
+    if (filters?.search) params.search = filters.search;
     
     const response = await api.get('/licitacoes/', { params });
     return response.data;
