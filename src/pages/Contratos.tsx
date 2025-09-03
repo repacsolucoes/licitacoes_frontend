@@ -13,6 +13,8 @@ const Contratos: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [selectedLicitacao, setSelectedLicitacao] = useState<Licitacao | null>(null);
+  const [viewingItem, setViewingItem] = useState<any>(null);
+  const [showItemModal, setShowItemModal] = useState(false);
   const [formData, setFormData] = useState({
     numero_contrato: '',
     data_contrato: '',
@@ -202,10 +204,52 @@ const Contratos: React.FC = () => {
     setShowModal(true);
   };
 
+  // Função para visualizar detalhes do item
+  const handleViewItem = (item: any) => {
+    setViewingItem(item);
+    setShowItemModal(true);
+  };
+
   // Abrir modal para editar contrato
-  const handleEditContrato = (contrato: Contrato) => {
+  const handleEditContrato = async (contrato: Contrato) => {
+    console.log('🔍 Editando contrato:', contrato);
     setEditingContrato(contrato);
-    setSelectedLicitacao(contrato.licitacao || null);
+    
+    // Definir a licitação associada
+    if (contrato.licitacao) {
+      console.log('✅ Licitação encontrada no contrato:', contrato.licitacao);
+      setSelectedLicitacao(contrato.licitacao);
+      
+      // 🔍 CORREÇÃO: Buscar grupos e itens automaticamente
+      try {
+        console.log('🔍 Buscando grupos e itens da licitação para edição...');
+        const response = await contratoService.buscarGruposItensLicitacao(contrato.licitacao.id);
+        console.log('✅ Grupos e itens recebidos para edição:', response);
+        
+        // Nova estrutura: { grupos_itens, resumo_financeiro }
+        if (response.grupos_itens) {
+          setGruposItens(response.grupos_itens);
+          setResumoFinanceiro(response.resumo_financeiro);
+          console.log('✅ Grupos e itens carregados para edição');
+        } else {
+          // Estrutura antiga (compatibilidade)
+          setGruposItens(response);
+          setResumoFinanceiro(null);
+          console.log('⚠️ Estrutura antiga usada para edição');
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar grupos e itens para edição:', error);
+        setGruposItens([]);
+        setResumoFinanceiro(null);
+      }
+    } else {
+      console.log('❌ Nenhuma licitação associada ao contrato');
+      setSelectedLicitacao(null);
+      setGruposItens([]);
+      setResumoFinanceiro(null);
+    }
+    
+    // Definir dados do formulário
     setFormData({
       numero_contrato: contrato.numero_contrato,
       data_contrato: contrato.data_contrato.split('T')[0],
@@ -215,7 +259,9 @@ const Contratos: React.FC = () => {
       observacoes: contrato.observacoes || '',
       status: contrato.status
     });
+    
     setShowModal(true);
+    console.log('✅ Modal de edição aberto com dados carregados');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -694,7 +740,12 @@ const Contratos: React.FC = () => {
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             <div className="flex items-center space-x-2">
-                              <button className="text-blue-600 hover:text-blue-900">
+                              <button 
+                                type="button"
+                                onClick={() => handleViewItem(item)}
+                                className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
+                                title="Ver detalhes do item"
+                              >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -881,9 +932,13 @@ const Contratos: React.FC = () => {
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <div className="text-sm font-medium text-blue-600">Total de Itens</div>
+                        <div className="text-sm font-medium text-blue-600">
+                          {resumoFinanceiro.tipo_contagem === 'grupos' ? 'Total de Grupos' : 'Total de Itens'}
+                        </div>
                         <div className="text-2xl font-bold text-blue-800">{resumoFinanceiro.total_itens}</div>
-                        <div className="text-xs text-blue-600">Quantidade: {resumoFinanceiro.total_quantidade}</div>
+                        <div className="text-xs text-blue-600">
+                          {resumoFinanceiro.tipo_contagem === 'grupos' ? 'Grupos organizados' : 'Quantidade total'}
+                        </div>
                       </div>
                       
                       <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -936,6 +991,120 @@ const Contratos: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para visualizar detalhes do item */}
+      {showItemModal && viewingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  📋 Detalhes do Item
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowItemModal(false);
+                    setViewingItem(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4">
+              <div className="space-y-4">
+                {/* Informações básicas */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Código:</span>
+                    <div className="text-lg font-semibold text-gray-800 mt-1">
+                      {viewingItem.posicao?.toString().padStart(3, '0') || 'N/A'}
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gray-50 p-3 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">Quantidade:</span>
+                    <div className="text-lg font-semibold text-gray-800 mt-1">
+                      {viewingItem.quantidade} {viewingItem.unidade}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Descrição */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <span className="text-sm font-medium text-blue-600">Descrição:</span>
+                  <div className="text-gray-800 mt-2 font-medium">
+                    {viewingItem.descricao}
+                  </div>
+                </div>
+
+                {/* Especificações técnicas */}
+                {viewingItem.especificacoes_tecnicas && (
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <span className="text-sm font-medium text-green-600">Especificações Técnicas:</span>
+                    <div className="text-gray-800 mt-2">
+                      {viewingItem.especificacoes_tecnicas}
+                    </div>
+                  </div>
+                )}
+
+                {/* Observações */}
+                {viewingItem.observacoes && (
+                  <div className="bg-yellow-50 p-4 rounded-lg">
+                    <span className="text-sm font-medium text-yellow-600">Observações:</span>
+                    <div className="text-gray-800 mt-2">
+                      {viewingItem.observacoes}
+                    </div>
+                  </div>
+                )}
+
+                {/* Informações financeiras */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-50 p-3 rounded-lg">
+                    <span className="text-sm font-medium text-green-600">Preço Unitário:</span>
+                    <div className="text-lg font-semibold text-green-800 mt-1">
+                      R$ {viewingItem.preco_unitario?.toFixed(2) || '0.00'}
+                    </div>
+                  </div>
+                  
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <span className="text-sm font-medium text-blue-600">Preço Total:</span>
+                    <div className="text-lg font-semibold text-blue-800 mt-1">
+                      R$ {viewingItem.preco_total?.toFixed(2) || '0.00'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Marca/Modelo */}
+                {viewingItem.marca_modelo && (
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <span className="text-sm font-medium text-purple-600">Marca/Modelo:</span>
+                    <div className="text-gray-800 mt-2 font-medium">
+                      {viewingItem.marca_modelo}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowItemModal(false);
+                  setViewingItem(null);
+                }}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
