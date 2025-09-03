@@ -10,6 +10,7 @@ import Usuarios from './pages/Usuarios';
 import Relatorios from './pages/Relatorios';
 import Documentacoes from './pages/Documentacoes';
 import Pedidos from './pages/Pedidos';
+import Contratos from './pages/Contratos';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -80,6 +81,16 @@ const App: React.FC = () => {
               <PrivateRoute>
                 <Layout>
                   <Pedidos />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/contratos"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <Contratos />
                 </Layout>
               </PrivateRoute>
             }

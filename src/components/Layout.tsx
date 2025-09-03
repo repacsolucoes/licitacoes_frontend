@@ -61,6 +61,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Licitações', href: '/licitacoes', icon: FileText },
     { name: 'Pedidos', href: '/pedidos', icon: ShoppingCart },
+    { name: 'Contratos', href: '/contratos', icon: FileText },
     { name: isAdmin ? 'Clientes' : 'Dados da Empresa', href: '/clientes', icon: Users },
     { name: 'Documentações', href: '/documentacoes', icon: FileArchive },
     ...(isAdmin ? [{ name: 'Usuários', href: '/usuarios', icon: User }] : []),

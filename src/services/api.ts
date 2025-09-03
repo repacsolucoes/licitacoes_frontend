@@ -1,11 +1,11 @@
 import axios from 'axios';
-import { LoginCredentials, AuthResponse, User, Cliente, Licitacao, DashboardStats, Documentacao, Pedido, PedidoCreate, PedidoUpdate, PedidoStats } from '../types';
+import { LoginCredentials, AuthResponse, User, Cliente, Licitacao, DashboardStats, Documentacao, Pedido, PedidoCreate, PedidoUpdate, PedidoStats, ItemLicitacao, LicitacaoComItensCreate, LicitacaoComItens, Contrato, ContratoCreate, ContratoUpdate, ContratoStats } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8100/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000, // 10 segundos de timeout
+  timeout: 30000, // 30 segundos de timeout
 });
 
 // Interceptor para adicionar token de autenticação
@@ -161,6 +161,11 @@ export const licitacaoService = {
     return response.data;
   },
 
+  getCompleta: async (id: number): Promise<LicitacaoComItens> => {
+    const response = await api.get(`/licitacoes/${id}/completa`);
+    return response.data;
+  },
+
   create: async (licitacao: Omit<Licitacao, 'id' | 'created_at' | 'updated_at'>): Promise<Licitacao> => {
     const response = await api.post('/licitacoes/', licitacao);
     return response.data;
@@ -224,13 +229,63 @@ export const licitacaoService = {
   },
 
   getRelatorioPorStatus: async (clienteId?: number): Promise<any[]> => {
-    const params = clienteId ? { cliente_id: clienteId } : {};
+    const params: any = {};
+    if (clienteId) params.cliente_id = clienteId;
+    
     const response = await api.get('/licitacoes/relatorios/por-status', { params });
+    return response.data;
+  },
+
+  // Novos métodos para itens de licitação
+    createComItens: async (licitacao: LicitacaoComItensCreate): Promise<LicitacaoComItens> => {
+    const response = await api.post('/licitacoes/com-itens-fixed', licitacao);
+    return response.data;
+  },
+
+  updateComItens: async (licitacaoId: number, licitacao: LicitacaoComItensCreate): Promise<LicitacaoComItens> => {
+    const response = await api.put(`/licitacoes/${licitacaoId}/com-itens-fixed`, licitacao);
+    return response.data;
+  },
+
+  listItens: async (licitacaoId: number): Promise<ItemLicitacao[]> => {
+    const response = await api.get(`/licitacoes/${licitacaoId}/itens`);
+    return response.data;
+  },
+
+  addItem: async (licitacaoId: number, item: Omit<ItemLicitacao, 'id' | 'licitacao_id' | 'created_at' | 'updated_at'>): Promise<ItemLicitacao> => {
+    const response = await api.post(`/licitacoes/${licitacaoId}/itens`, item);
+    return response.data;
+  },
+
+  updateItem: async (licitacaoId: number, itemId: number, item: Partial<ItemLicitacao>): Promise<ItemLicitacao> => {
+    const response = await api.put(`/licitacoes/${licitacaoId}/itens/${itemId}`, item);
+    return response.data;
+  },
+
+  deleteItem: async (licitacaoId: number, itemId: number): Promise<void> => {
+    await api.delete(`/licitacoes/${licitacaoId}/itens/${itemId}`);
+  },
+
+  // Método para buscar dados do órgão a partir do UASG
+  buscarDadosOrgao: async (uasg: string): Promise<any> => {
+    const response = await api.get(`/licitacoes/buscar-dados-orgao/${uasg}`);
+    return response.data;
+  },
+
+  // Métodos para grupos de licitação
+  listGrupos: async (licitacaoId: number): Promise<any[]> => {
+    const response = await api.get(`/licitacoes/${licitacaoId}/grupos`);
+    return response.data;
+  },
+  
+  updateGrupo: async (grupoId: number, grupoData: { nome: string; descricao?: string; posicao?: string }): Promise<any> => {
+    const response = await api.put(`/licitacoes/grupos/${grupoId}`, grupoData);
     return response.data;
   },
 };
 
-export const pedidoService = {
+// Serviço de Pedidos (Legado - será removido)
+export const pedidoServiceLegacy = {
   list: async (statusGeral?: string, clienteId?: number): Promise<Pedido[]> => {
     const params: any = {};
     if (statusGeral) params.status_geral = statusGeral;
@@ -241,7 +296,7 @@ export const pedidoService = {
   },
 
   get: async (id: number): Promise<Pedido> => {
-    const response = await api.get(`/pedidos/${id}`);
+    const response = await api.get(`/pedidos/${id}/`);
     return response.data;
   },
 
@@ -251,12 +306,12 @@ export const pedidoService = {
   },
 
   update: async (id: number, pedido: PedidoUpdate): Promise<Pedido> => {
-    const response = await api.put(`/pedidos/${id}`, pedido);
+    const response = await api.put(`/pedidos/${id}/`, pedido);
     return response.data;
   },
 
   delete: async (id: number): Promise<void> => {
-    await api.delete(`/pedidos/${id}`);
+    await api.delete(`/pedidos/${id}/`);
   },
 
   getByLicitacao: async (licitacaoId: number): Promise<Pedido | null> => {
@@ -441,6 +496,135 @@ export const documentacaoService = {
 
   moverAtestadosCapacidade: async (): Promise<{ message: string; movidas: number; total_processadas: number }> => {
     const response = await api.post('/documentacoes/mover-atestados-capacidade');
+    return response.data;
+  },
+};
+
+// Serviço de Pedidos
+export const pedidoService = {
+  list: async (): Promise<Pedido[]> => {
+    const response = await api.get('/pedidos/');
+    return response.data;
+  },
+
+  get: async (id: number): Promise<Pedido> => {
+    const response = await api.get(`/pedidos/${id}/`);
+    return response.data;
+  },
+
+  create: async (pedido: PedidoCreate): Promise<Pedido> => {
+    const response = await api.post('/pedidos/', pedido);
+    return response.data;
+  },
+
+  update: async (id: number, pedido: PedidoUpdate): Promise<Pedido> => {
+    const response = await api.put(`/pedidos/${id}/`, pedido);
+    return response.data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/pedidos/${id}/`);
+  },
+
+  getByLicitacao: async (licitacaoId: number): Promise<Pedido[]> => {
+    const response = await api.get(`/pedidos/licitacao/${licitacaoId}/`);
+    return response.data;
+  },
+
+  getStats: async (): Promise<PedidoStats> => {
+    const response = await api.get('/pedidos/dashboard/stats');
+    return response.data;
+  },
+};
+
+// Serviço de Contratos
+export const contratoService = {
+  list: async (): Promise<Contrato[]> => {
+    const response = await api.get('/contratos/');
+    return response.data;
+  },
+
+  get: async (id: number): Promise<Contrato> => {
+    const response = await api.get(`/contratos/${id}/`);
+    return response.data;
+  },
+
+  create: async (contrato: ContratoCreate): Promise<Contrato> => {
+    const response = await api.post('/contratos/', contrato);
+    return response.data;
+  },
+
+  update: async (id: number, contrato: ContratoUpdate): Promise<Contrato> => {
+    const response = await api.put(`/contratos/${id}/`, contrato);
+    return response.data;
+  },
+
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/contratos/${id}/`);
+  },
+
+  getByLicitacao: async (licitacaoId: number): Promise<Contrato | null> => {
+    const response = await api.get(`/contratos/licitacao/${licitacaoId}/`);
+    return response.data;
+  },
+
+  getStats: async (): Promise<ContratoStats> => {
+    const response = await api.get('/contratos/dashboard/stats');
+    return response.data;
+  },
+
+  // Novo método para buscar dados do órgão
+  buscarDadosOrgao: async (uasg: string): Promise<any> => {
+    const response = await api.get(`/contratos/dados-orgao/${uasg}`);
+    return response.data;
+  },
+
+  // Buscar grupos e itens de uma licitação
+  buscarGruposItensLicitacao: async (licitacaoId: number): Promise<any> => {
+    const response = await api.get(`/contratos/licitacao/${licitacaoId}/grupos-itens`);
+    return response.data;
+  },
+
+  // Associar item a um grupo
+  associarItemGrupo: async (itemId: number, grupoId: number | null): Promise<any> => {
+    const response = await api.put(`/licitacoes/itens/${itemId}/grupo`, { grupo_id: grupoId });
+    return response.data;
+  },
+
+  // Criar grupo
+  criarGrupo: async (licitacaoId: number, grupo: any): Promise<any> => {
+    const response = await api.post(`/licitacoes/${licitacaoId}/grupos`, grupo);
+    return response.data;
+  },
+
+  // Deletar grupo
+  deletarGrupo: async (grupoId: number): Promise<any> => {
+    const response = await api.delete(`/licitacoes/grupos/${grupoId}`);
+    return response.data;
+  },
+
+  // Buscar contrato de uma licitação
+      buscarContratoLicitacao: async (licitacaoId: number, pedidoId?: number): Promise<any> => {
+      const params = pedidoId ? { pedido_id: pedidoId } : {};
+      const response = await api.get(`/pedidos/licitacao/${licitacaoId}/contrato`, { params });
+      return response.data;
+    },
+
+  // Listar todos os contratos
+  listarContratos: async (): Promise<any> => {
+    const response = await api.get('/pedidos/contratos');
+    return response.data;
+  },
+
+  // Debug de contratos
+  debugContratos: async (): Promise<any> => {
+    const response = await api.get('/pedidos/contratos/debug');
+    return response.data;
+  },
+
+  // Debug de itens de contrato
+  debugItensContrato: async (contratoId: number): Promise<any> => {
+    const response = await api.get(`/pedidos/contratos/${contratoId}/itens`);
     return response.data;
   },
 };
