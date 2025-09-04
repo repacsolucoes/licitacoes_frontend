@@ -10,10 +10,12 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { pedidoService, licitacaoService, clienteService, contratoService } from '../services/api';
-import { Pedido, PedidoCreate, PedidoUpdate, Licitacao, LicitacaoComItens, Cliente, User } from '../types';
+import { Pedido, PedidoCreate, PedidoUpdate, Licitacao, Cliente, User } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { RefreshButton } from '../components/RefreshButton';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import CustomAlert from '../components/CustomAlert';
+import { useCustomAlert } from '../hooks/useCustomAlert';
 
 interface PedidoWithDetails extends Pedido {
   licitacao: Licitacao;
@@ -22,6 +24,7 @@ interface PedidoWithDetails extends Pedido {
 
 const Pedidos: React.FC = () => {
   const { user } = useAuth();
+  const { alertState, hideAlert, confirm } = useCustomAlert();
   
   // Auto-refresh quando a página é carregada
   useAutoRefresh(['pedidos', 'pedidos-stats']);
@@ -72,18 +75,8 @@ const Pedidos: React.FC = () => {
     observacoes_pagamento: ''
   });
 
-  // Estado para controlar menus desplegáveis
-  const [expandedSections, setExpandedSections] = useState({
-    empenho: false,
-    pedido_orgao: false,
-    contrato: false,
-    outros_documentos: false,
-    entrega: false,
-    pagamento: false
-  });
 
   // Estado para o novo modal avançado
-  const [selectedLicitacao, setSelectedLicitacao] = useState<Licitacao | null>(null);
   const [pedidoItems, setPedidoItems] = useState<Array<{
     item_id: number;
     quantidade: number | string;
@@ -92,6 +85,7 @@ const Pedidos: React.FC = () => {
     preco_total?: number;
     custo_unitario?: number;
     custo_total?: number;
+    item_licitacao?: any;
   }>>([]);
   const [availableItems, setAvailableItems] = useState<Array<{
     id: number;
@@ -99,24 +93,52 @@ const Pedidos: React.FC = () => {
     quantidade_disponivel: number;
   }>>([]);
   
+  // 🎯 NOVO: Estado para modal de adicionar itens
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  
   // 🎯 NOVO: Estado para dados do contrato
   const [contratoData, setContratoData] = useState<any>(null);
 
+  // 🎯 CORRIGIDO: useEffect otimizado para evitar loops infinitos
   useEffect(() => {
     carregarDados();
   }, [filtroStatus, filtroCliente]);
 
   // Listener para tecla Esc para fechar modais
   useEffect(() => {
-    const handleEscKey = (event: KeyboardEvent) => {
+    const handleEscKey = async (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (showModal) {
-          setShowModal(false);
-          setEditingPedido(null);
-          resetForm();
+          // 🎯 NOVO: Confirmar antes de sair se estiver editando
+          if (editingPedido) {
+            const confirmed = await confirm({
+              title: 'Sair da Edição',
+              message: 'Tem certeza que deseja sair da edição? As alterações não salvas serão perdidas.',
+              type: 'warning'
+            });
+            if (confirmed) {
+              setShowModal(false);
+              setEditingPedido(null);
+              resetForm();
+            }
+          } else {
+            const confirmed = await confirm({
+              title: 'Sair da Criação',
+              message: 'Tem certeza que deseja sair da criação do pedido? Os dados não salvos serão perdidos.',
+              type: 'warning'
+            });
+            if (confirmed) {
+              setShowModal(false);
+              setEditingPedido(null);
+              resetForm();
+            }
+          }
         }
         if (viewingPedido) {
           setViewingPedido(null);
+        }
+        if (showAddItemModal) {
+          setShowAddItemModal(false);
         }
       }
     };
@@ -126,7 +148,7 @@ const Pedidos: React.FC = () => {
     return () => {
       document.removeEventListener('keydown', handleEscKey);
     };
-  }, [showModal, viewingPedido]);
+  }, [showModal, viewingPedido, showAddItemModal, editingPedido, confirm]);
 
 
 
@@ -135,8 +157,6 @@ const Pedidos: React.FC = () => {
   const carregarDados = async () => {
     try {
       setLoading(true);
-      
-
       
       // Carregar pedidos
       try {
@@ -175,12 +195,9 @@ const Pedidos: React.FC = () => {
       }
       
       try {
-        console.log('🔍 Buscando contratos ativos...');
         const contratosData = await contratoService.listarContratos();
-        console.log('📋 Contratos recebidos:', contratosData);
         setContratos(contratosData);
       } catch (error: any) {
-        console.error('❌ Erro ao buscar contratos:', error);
         setContratos([]);
       }
 
@@ -200,10 +217,6 @@ const Pedidos: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    console.log('🔄 handleSubmit chamado');
-    console.log('📝 FormData:', formData);
-    console.log('📦 PedidoItems:', pedidoItems);
     
     try {
       // 🎯 NOVO: Preparar dados completos incluindo itens
@@ -226,118 +239,125 @@ const Pedidos: React.FC = () => {
         }, 0)
       };
       
-      console.log('📊 Dados completos para salvar:', dadosCompletos);
-      
       if (editingPedido) {
-        console.log('🔄 Atualizando pedido existente ID:', editingPedido.id);
         await pedidoService.update(editingPedido.id, dadosCompletos as PedidoUpdate);
-        console.log('✅ Pedido atualizado com sucesso');
       } else {
-        console.log('🆕 Criando novo pedido');
         await pedidoService.create(dadosCompletos);
-        console.log('✅ Pedido criado com sucesso');
       }
       
       setShowModal(false);
       setEditingPedido(null);
       
-      // 🎯 NOVO: Não resetar o formulário imediatamente para preservar edições
-      // resetForm();
-      
       // Recarregar apenas a lista de pedidos, não os dados do formulário
       carregarDados();
       
       // 🎯 NOVO: Mostrar mensagem de sucesso
-      alert('✅ Pedido atualizado com sucesso!');
+      await confirm({
+        title: 'Sucesso',
+        message: 'Pedido atualizado com sucesso!',
+        type: 'success',
+        confirmText: 'OK'
+      });
     } catch (error) {
-      console.error('❌ Erro ao salvar pedido:', error);
-      alert(`❌ Erro ao salvar pedido: ${error}`);
+      await confirm({
+        title: 'Erro',
+        message: `Erro ao salvar pedido: ${error}`,
+        type: 'error',
+        confirmText: 'OK'
+      });
     }
   };
 
   const handleEdit = async (pedido: PedidoWithDetails) => {
-    console.log('🔄 Editando pedido:', pedido);
     setEditingPedido(pedido);
     
     // Carregar dados da licitação
     try {
-      console.log('📋 Buscando licitação ID:', pedido.licitacao_id);
-      const licitacaoComItens = await licitacaoService.get(pedido.licitacao_id);
-      console.log('✅ Licitação carregada:', licitacaoComItens);
-      setSelectedLicitacao(licitacaoComItens);
+      await licitacaoService.get(pedido.licitacao_id);
       
       // 🎯 NOVO: Buscar dados do contrato para esta licitação
       try {
-        console.log('🔍 Buscando dados do contrato para licitação:', pedido.licitacao_id);
-        const contratoData = await contratoService.buscarContratoLicitacao(pedido.licitacao_id);
-        console.log('📊 Dados do contrato recebidos:', contratoData);
+        // 🎯 CORRIGIDO: Usar o mesmo endpoint que a criação usa para garantir dados consistentes
+        // Primeiro, encontrar o contrato ativo para esta licitação
+        const contratosAtivos = await contratoService.listarContratos();
+        const contratoAtivo = contratosAtivos.find((c: any) => c.licitacao.id === pedido.licitacao_id);
         
-              if (contratoData.contrato_existe) {
-        console.log('✅ Contrato existe, processando itens...');
-        setContratoData(contratoData);
-        
-        // 🎯 NOVO: Preservar quantidades editadas se existirem
-        const itensExistentes = pedidoItems.length > 0 ? pedidoItems : [];
-        console.log('🔄 Itens existentes no pedido:', itensExistentes);
-        
-        // Preencher itens do pedido baseados no contrato, mas preservar quantidades editadas
-        const itensContrato = contratoData.itens.map((item: any) => {
-          // Buscar se já existe um item editado para este item_id
-          const itemExistente = itensExistentes.find(ie => ie.item_id === item.id);
+        if (contratoAtivo) {
+          // Usar o mesmo endpoint que a criação usa
+          const contratoData = await contratoService.obterItensParaPedido(contratoAtivo.id);
           
-          return {
-            item_id: item.id,
-            quantidade: itemExistente ? itemExistente.quantidade : (item.quantidade || 0),
-            max_quantidade: item.quantidade || 0,
-            preco_unitario: item.preco_unitario || 0,
-            preco_total: itemExistente ? 
-              (Number(itemExistente.quantidade) * (item.preco_unitario || 0)) : 
-              (item.preco_total || 0),
-            custo_unitario: item.custo_unitario || 0,
-            custo_total: itemExistente ? 
-              (Number(itemExistente.quantidade) * (item.custo_unitario || 0)) : 
-              (item.custo_total || 0)
-          };
-        });
-        
-        console.log('🔄 Itens processados para o pedido (preservando edições):', itensContrato);
-        setPedidoItems(itensContrato);
-          
-          // Atualizar itens disponíveis baseados no contrato
-          setAvailableItems(contratoData.itens.map((item: any) => ({
-            id: item.id,
-            descricao: item.descricao || `Item ${item.id}`,
-            quantidade_disponivel: item.quantidade || 0
-          })));
-          
-          console.log('✅ Itens do contrato carregados para edição');
-        } else {
-          console.log('⚠️ Contrato não existe para esta licitação');
-          // Carregar itens disponíveis da licitação como fallback
+          if (contratoData && contratoData.total_itens_disponiveis > 0) {
+            // 🎯 NOVO: Mapear dados do contrato para o formato esperado
+            const contratoDataMapeado = {
+              contrato_existe: true,
+              contrato: contratoData.contrato,
+              licitacao: {
+                id: contratoData.licitacao_id,
+                numero: contratoData.licitacao_numero,
+                tipo_classificacao: contratoData.tipo_classificacao
+              },
+              itens: contratoData.itens || [],
+              itens_licitacao: contratoData.itens_licitacao || [],
+              grupos_licitacao: contratoData.grupos_licitacao || []
+            };
+            
+            setContratoData(contratoDataMapeado);
+            
+            // 🎯 CORRIGIDO: Para edição, carregar os itens que já existem no pedido
+            // 🎯 NOVO: Carregar itens existentes do pedido
+            if (pedido.itens_pedido && pedido.itens_pedido.length > 0) {
+              const itensExistentes = pedido.itens_pedido.map((itemPedido: any) => {
+                // 🎯 NOVO: Usar os dados que já vêm do backend (incluindo descrição)
+                return {
+                  item_id: itemPedido.item_licitacao_id,
+                  quantidade: itemPedido.quantidade_solicitada || 0,
+                  max_quantidade: itemPedido.quantidade_solicitada || 0, // Usar quantidade atual como máximo
+                  preco_unitario: itemPedido.preco_unitario || 0,
+                  preco_total: itemPedido.preco_total || 0,
+                  custo_unitario: itemPedido.custo_unitario || 0,
+                  custo_total: itemPedido.custo_total || 0,
+                  // 🎯 NOVO: Incluir dados do item_licitacao que vêm do backend
+                  item_licitacao: itemPedido.item_licitacao
+                };
+              });
+              
+              setPedidoItems(itensExistentes);
+            } else {
+              setPedidoItems([]);
+            }
+              
+              // Atualizar itens disponíveis baseados no contrato
+              setAvailableItems(contratoData.itens.map((item: any) => ({
+                id: item.id,
+                descricao: item.descricao || `Item ${item.id}`,
+                quantidade_disponivel: item.quantidade || 0
+              })));
+            } else {
+              // Carregar itens disponíveis da licitação como fallback
+              const items = await licitacaoService.listItens(pedido.licitacao_id);
+              setAvailableItems(items.map(item => ({
+                id: item.id,
+                descricao: item.descricao,
+                quantidade_disponivel: item.quantidade
+              })));
+            }
+          } else {
+            setContratoData(null);
+            setAvailableItems([]);
+            setPedidoItems([]);
+          }
+        } catch (error) {
+          // Fallback para itens da licitação
           const items = await licitacaoService.listItens(pedido.licitacao_id);
-          console.log('📦 Itens da licitação (fallback):', items);
           setAvailableItems(items.map(item => ({
             id: item.id,
             descricao: item.descricao,
             quantidade_disponivel: item.quantidade
           })));
         }
-      } catch (error) {
-        console.error('❌ Erro ao buscar dados do contrato:', error);
-        // Fallback para itens da licitação
-        const items = await licitacaoService.listItens(pedido.licitacao_id);
-        setAvailableItems(items.map(item => ({
-          id: item.id,
-          descricao: item.descricao,
-          quantidade_disponivel: item.quantidade
-        })));
-      }
     } catch (error) {
-      console.error('❌ Erro ao carregar dados da licitação:', error);
+      // Erro ao carregar dados da licitação
     }
-    
-    // 🎯 NOVO: Carregar itens do pedido existente (se existirem)
-    // TODO: Implementar busca dos itens do pedido quando tivermos essa API
     
     const formDataToSet = {
       licitacao_id: pedido.licitacao_id,
@@ -368,30 +388,78 @@ const Pedidos: React.FC = () => {
       observacoes_gerais: pedido.observacoes_gerais
     };
     
-    console.log('📝 FormData a ser definido:', formDataToSet);
     setFormData(formDataToSet);
     
     setShowModal(true);
   };
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Tem certeza que deseja excluir este pedido?')) {
+    const confirmed = await confirm({
+      title: 'Excluir Pedido',
+      message: 'Tem certeza que deseja excluir este pedido? Esta ação não pode ser desfeita.',
+      type: 'error'
+    });
+    
+    if (confirmed) {
       try {
+        setLoading(true);
         await pedidoService.delete(id);
-        carregarDados();
+        
+        // 🎯 CORRIGIDO: Atualizar lista localmente em vez de recarregar tudo
+        setPedidos(prevPedidos => prevPedidos.filter(pedido => pedido.id !== id));
+        
+        // 🎯 CORRIGIDO: Atualizar estatísticas localmente
+        setStats(prevStats => ({
+          ...prevStats,
+          total_pedidos: prevStats.total_pedidos - 1,
+          pedidos_em_andamento: prevStats.pedidos_em_andamento - 1
+        }));
+        
       } catch (error) {
-        console.error('Erro ao deletar pedido:', error);
+        // Usar alerta customizado para erro
+        await confirm({
+          title: 'Erro',
+          message: 'Erro ao deletar pedido. Tente novamente.',
+          type: 'error',
+          confirmText: 'OK'
+        });
+      } finally {
+        setLoading(false);
       }
     }
   };
 
+  // 🎯 NOVO: Função para obter descrição do item
+  const getItemDescription = (itemId: number): string => {
+    // 🎯 NOVO: Primeiro, verificar se o item atual tem dados de item_licitacao
+    const currentItem = pedidoItems.find((item: any) => item.item_id === itemId);
+    
+    if (currentItem && currentItem.item_licitacao && currentItem.item_licitacao.descricao) {
+      return currentItem.item_licitacao.descricao;
+    }
+    
+    // 1. Tentar buscar em availableItems
+    const availableItem = availableItems.find((avItem: any) => avItem.id === itemId);
+    if (availableItem?.descricao) {
+      return availableItem.descricao;
+    }
+    
+    // 2. Tentar buscar em contratoData.itens
+    if (contratoData?.itens) {
+      const contratoItem = contratoData.itens.find((item: any) => item.id === itemId);
+      if (contratoItem?.descricao) {
+        return contratoItem.descricao;
+      }
+    }
+    
+    // 3. Fallback: retornar ID do item
+    return `Item ${itemId}`;
+  };
+
   // 🎯 NOVO: Funções para o modal baseado em contratos
   const handleContratoChange = async (contratoId: number) => {
-    console.log('🔄 handleContratoChange chamado com ID:', contratoId);
-    
     if (contratoId) {
       const contrato = contratos.find(c => c.id === contratoId);
-      console.log('📋 Contrato encontrado:', contrato);
       
       if (contrato) {
         // Preencher dados da licitação baseados no contrato
@@ -400,126 +468,225 @@ const Pedidos: React.FC = () => {
           licitacao_id: contrato.licitacao.id
         }));
         
-        // Definir licitação selecionada baseada no contrato
-        setSelectedLicitacao(contrato.licitacao);
         
-        // 🎯 Buscar dados completos do contrato
+        // 🎯 NOVO: Usar endpoint específico para itens disponíveis
         try {
-          console.log('🔍 Buscando dados completos do contrato para licitação:', contrato.licitacao.id);
-          // Passar ID do pedido sendo editado para não contar no estoque
-          const pedidoId = editingPedido?.id || null;
-          const contratoData = await contratoService.buscarContratoLicitacao(contrato.licitacao.id, pedidoId);
-          console.log('📊 Dados completos do contrato recebidos:', contratoData);
+          const itensDisponiveis = await contratoService.obterItensParaPedido(contrato.id);
           
-          setContratoData(contratoData);
-          
-          if (contratoData.contrato_existe) {
-            console.log('✅ Contrato existe, processando itens...');
-            console.log('📦 Itens do contrato:', contratoData.itens);
-            console.log('📋 Itens da licitação:', contratoData.itens_licitacao);
-            console.log('📦 Grupos da licitação:', contratoData.grupos_licitacao);
+          if (itensDisponiveis && itensDisponiveis.total_itens_disponiveis > 0) {
+            // 🎯 CORRIGIDO: Usar quantidades realmente disponíveis
+            const itensContrato = itensDisponiveis.itens.map((item: any) => ({
+              item_id: item.id,
+              quantidade: '', // Iniciar vazio para novo pedido (não 0)
+              max_quantidade: item.quantidade_disponivel, // Usar quantidade disponível como máximo
+              preco_unitario: item.preco_unitario || 0,
+              preco_total: 0, // Iniciar com 0
+              custo_unitario: item.custo_unitario || 0,
+              custo_total: 0 // Iniciar com 0
+            }));
             
-            // 🎯 CORRIGIDO: Usar itens_licitacao para itens sem grupo
-            if (contratoData.itens_licitacao && contratoData.itens_licitacao.length > 0) {
-              console.log('✅ Itens da licitação encontrados, processando...');
-              
-              // Preencher itens do pedido baseados nos itens da licitação
-              const itensContrato = contratoData.itens_licitacao.map((item: any) => ({
-                item_id: item.id,
-                quantidade: item.quantidade || 0,
-                max_quantidade: item.quantidade_original || item.quantidade || 0,
-                preco_unitario: item.preco_unitario || 0,
-                preco_total: item.preco_total || 0,
-                custo_unitario: item.custo_unitario || 0,
-                custo_total: item.custo_total || 0
-              }));
-              
-              console.log('🔄 Itens processados para o pedido:', itensContrato);
-              setPedidoItems(itensContrato);
-              
-              // Atualizar itens disponíveis baseados nos itens da licitação
-              setAvailableItems(contratoData.itens_licitacao.map((item: any) => ({
-                id: item.id,
-                descricao: item.descricao || `Item ${item.id}`,
-                quantidade_disponivel: item.quantidade || 0
-              })));
-              
-              console.log('✅ Itens da licitação carregados:', itensContrato);
-            } else {
-              console.log('⚠️ Nenhum item da licitação encontrado');
-              setPedidoItems([]);
-              setAvailableItems([]);
-            }
+            setPedidoItems(itensContrato);
+            
+            // Atualizar itens disponíveis com quantidades reais
+            setAvailableItems(itensDisponiveis.itens.map((item: any) => ({
+              id: item.id,
+              descricao: item.descricao || `Item ${item.id}`,
+              quantidade_disponivel: item.quantidade_disponivel || 0
+            })));
+            
+            // 🎯 CORRIGIDO: Mapear estrutura correta para grupos e ordenar
+            const gruposMapeados = (itensDisponiveis.grupos_licitacao || [])
+              .map((grupo: any) => ({
+                id: grupo.id,
+                nome: grupo.nome || `Grupo ${grupo.id}`,
+                itens: grupo.itens || []
+              }))
+              .sort((a: any, b: any) => a.id - b.id); // Ordenar por ID
+            
+            const itensSemGrupo = (itensDisponiveis.itens_licitacao || []).map((item: any) => ({
+              ...item,
+              quantidade: item.quantidade_disponivel || '' // Iniciar vazio, não 0
+            }));
+            
+            // 🎯 NOVO: Não mostrar itens por padrão - usuário adiciona manualmente
+            setPedidoItems([]); // Iniciar sem itens
+            
+            // Atualizar dados do contrato para compatibilidade
+            setContratoData({
+              contrato_existe: true,
+              contrato: itensDisponiveis.contrato,
+              licitacao: {
+                id: itensDisponiveis.licitacao_id,
+                numero: itensDisponiveis.licitacao_numero,
+                tipo_classificacao: itensDisponiveis.tipo_classificacao
+              },
+              itens: itensDisponiveis.itens || [],
+              itens_licitacao: itensSemGrupo,
+              grupos_licitacao: gruposMapeados
+            });
           } else {
-            console.log('⚠️ Contrato não existe ou não foi encontrado');
+            setPedidoItems([]);
+            setAvailableItems([]);
+            setContratoData(null);
           }
         } catch (error) {
-          console.error('❌ Erro ao buscar dados do contrato:', error);
           setPedidoItems([]);
           setAvailableItems([]);
+          setContratoData(null);
         }
       }
     } else {
-      console.log('🔄 Limpando dados do contrato');
-      setSelectedLicitacao(null);
       setAvailableItems([]);
       setPedidoItems([]);
       setContratoData(null);
     }
   };
 
-  const addItemToPedido = () => {
-    setPedidoItems([...pedidoItems, {
-      item_id: 0,
-      quantidade: '',
-      max_quantidade: 0,
-      preco_unitario: 0,
-      preco_total: 0,
-      custo_unitario: 0,
-      custo_total: 0
-    }]);
-  };
+
 
   const removeItemFromPedido = (index: number) => {
     setPedidoItems(pedidoItems.filter((_, i) => i !== index));
   };
 
-  const handleItemChange = (itemId: number, field: string, value: any) => {
-    console.log(`🔍 DEBUG: handleItemChange chamado - itemId: ${itemId}, field: ${field}, value: ${value}`);
-    console.log(`🔍 DEBUG: pedidoItems atual:`, pedidoItems);
+  // 🎯 NOVO: Função para adicionar item ao pedido
+  const addItemToPedido = async (itemId: number, quantidade: number) => {
+    const itemDisponivel = availableItems.find(avItem => avItem.id === itemId);
+    if (!itemDisponivel) return;
+
+    // 🎯 NOVO: Validar se a quantidade não excede o disponível
+    if (quantidade > itemDisponivel.quantidade_disponivel) {
+      await confirm({
+        title: 'Quantidade Inválida',
+        message: `Quantidade não pode exceder ${itemDisponivel.quantidade_disponivel} (máximo disponível)`,
+        type: 'warning',
+        confirmText: 'OK'
+      });
+      return;
+    }
+
+    // 🎯 NOVO: Validar se há quantidade disponível
+    if (itemDisponivel.quantidade_disponivel <= 0) {
+      await confirm({
+        title: 'Item Indisponível',
+        message: `Item não disponível (quantidade: ${itemDisponivel.quantidade_disponivel})`,
+        type: 'warning',
+        confirmText: 'OK'
+      });
+      return;
+    }
+
+    // 🎯 NOVO: Buscar valores do contrato para este item
+    const itemContrato = contratoData?.itens.find((item: any) => item.id === itemId);
+    const precoUnitario = itemContrato?.preco_unitario || 0;
+    const custoUnitario = itemContrato?.custo_unitario || 0;
     
-    // Se for quantidade, validar contra o máximo do contrato
+
+    // Verificar se o item já existe no pedido
+    const itemExistente = pedidoItems.find(pi => pi.item_id === itemId);
+    if (itemExistente) {
+      // Atualizar quantidade existente
+      const newItems = pedidoItems.map(pi => 
+        pi.item_id === itemId 
+          ? { 
+              ...pi, 
+              quantidade: (Number(pi.quantidade) || 0) + quantidade,
+              preco_total: precoUnitario * ((Number(pi.quantidade) || 0) + quantidade),
+              custo_total: custoUnitario * ((Number(pi.quantidade) || 0) + quantidade)
+            }
+          : pi
+      );
+      setPedidoItems(newItems);
+    } else {
+      // Adicionar novo item
+      const newItem = {
+        item_id: itemId,
+        quantidade: quantidade,
+        max_quantidade: itemDisponivel.quantidade_disponivel,
+        preco_unitario: precoUnitario,
+        preco_total: precoUnitario * quantidade,
+        custo_unitario: custoUnitario,
+        custo_total: custoUnitario * quantidade
+      };
+      setPedidoItems([...pedidoItems, newItem]);
+    }
+    
+    // 🎯 NOVO: Atualizar quantidades disponíveis
+    setAvailableItems(prevItems => 
+      prevItems.map(item => 
+        item.id === itemId 
+          ? { ...item, quantidade_disponivel: item.quantidade_disponivel - quantidade }
+          : item
+      )
+    );
+    
+    // 🎯 NOVO: Atualizar também o contratoData para manter consistência
+    setContratoData((prevData: any) => {
+      if (!prevData) return prevData;
+      
+      return {
+        ...prevData,
+        itens: prevData.itens.map((item: any) => 
+          item.id === itemId 
+            ? { ...item, quantidade: item.quantidade - quantidade }
+            : item
+        )
+      };
+    });
+    
+    // 🎯 NOVO: Limpar campo de quantidade após adicionar
+    const quantidadeInput = document.getElementById(`qtd-${itemId}`) as HTMLInputElement;
+    if (quantidadeInput) {
+      quantidadeInput.value = '';
+    }
+    
+    // 🎯 NOVO: Não fechar modal automaticamente - permitir adicionar múltiplos itens
+    // setShowAddItemModal(false);
+  };
+
+  const handleItemChange = async (itemId: number, field: string, value: any) => {
+    // Se for quantidade, validar contra o máximo disponível
     if (field === 'quantidade') {
       if (contratoData && contratoData.contrato_existe) {
-        const itemContrato = contratoData.itens.find(i => i.id === itemId);
-        if (itemContrato) {
-          const maxQuantidade = itemContrato.quantidade;
+        // 🎯 NOVO: Buscar item na lista de itens disponíveis
+        const itemDisponivel = availableItems.find(i => i.id === itemId);
+        if (itemDisponivel) {
+          const maxQuantidade = itemDisponivel.quantidade_disponivel;
           const novaQuantidade = Number(value);
           
-          console.log(`🔍 DEBUG: Validando quantidade - Max: ${maxQuantidade}, Nova: ${novaQuantidade}`);
-          
           if (novaQuantidade > maxQuantidade) {
-            console.log(`⚠️ Quantidade ${novaQuantidade} excede o máximo da licitação ${maxQuantidade}`);
-            alert(`⚠️ Quantidade não pode exceder ${maxQuantidade} (máximo do contrato)`);
+            await confirm({
+              title: 'Quantidade Inválida',
+              message: `Quantidade não pode exceder ${maxQuantidade} (máximo disponível)`,
+              type: 'warning',
+              confirmText: 'OK'
+            });
             return; // Não atualizar se exceder o limite
           }
           
           if (novaQuantidade < 0) {
-            console.log(`⚠️ Quantidade ${novaQuantidade} não pode ser negativa`);
-            alert(`⚠️ Quantidade não pode ser negativa`);
+            await confirm({
+              title: 'Quantidade Inválida',
+              message: 'Quantidade não pode ser negativa',
+              type: 'warning',
+              confirmText: 'OK'
+            });
             return; // Não atualizar se for negativa
           }
           
           // Se quantidade for 0, marcar item como removido
           if (novaQuantidade === 0) {
-            if (confirm('Quantidade zero. Deseja remover este item do pedido?')) {
+            const confirmed = await confirm({
+              title: 'Remover Item',
+              message: 'Quantidade zero. Deseja remover este item do pedido?',
+              type: 'warning'
+            });
+            if (confirmed) {
               // Marcar item como removido (quantidade 0) em vez de deletar
               const itemIndex = pedidoItems.findIndex(pi => pi.item_id === itemId);
               if (itemIndex !== -1) {
                 const newItems = [...pedidoItems];
                 newItems[itemIndex] = { ...newItems[itemIndex], quantidade: 0 };
                 setPedidoItems(newItems);
-                console.log('🗑️ Item marcado como removido (quantidade 0)');
               }
               return;
             } else {
@@ -535,21 +702,18 @@ const Pedidos: React.FC = () => {
     const itemIndex = pedidoItems.findIndex(pi => pi.item_id === itemId);
     
     if (itemIndex === -1) {
-      console.log(`⚠️ Item não encontrado no pedidoItems, criando novo item`);
       // Criar novo item se não existir
       const newItem = {
         item_id: itemId,
         quantidade: field === 'quantidade' ? Number(value) : 0,
-        max_quantidade: contratoData?.itens.find(i => i.id === itemId)?.quantidade || 0,
-        custo_unitario: contratoData?.itens.find(i => i.id === itemId)?.custo_unitario || 0,
-        preco_unitario: contratoData?.itens.find(i => i.id === itemId)?.preco_unitario || 0,
+        max_quantidade: availableItems.find((i: any) => i.id === itemId)?.quantidade_disponivel || 0,
+        custo_unitario: contratoData?.itens.find((i: any) => i.id === itemId)?.custo_unitario || 0,
+        preco_unitario: contratoData?.itens.find((i: any) => i.id === itemId)?.preco_unitario || 0,
         custo_total: 0,
         preco_total: 0
       };
       setPedidoItems([...pedidoItems, newItem]);
-      console.log('✅ Novo item criado:', newItem);
     } else {
-      console.log(`✅ Item encontrado no índice ${itemIndex}, atualizando`);
       // Atualizar item existente
       const newItems = [...pedidoItems];
       newItems[itemIndex] = { ...newItems[itemIndex], [field]: value };
@@ -559,12 +723,9 @@ const Pedidos: React.FC = () => {
         const quantidade = Number(value);
         newItems[itemIndex].custo_total = (newItems[itemIndex].custo_unitario || 0) * quantidade;
         newItems[itemIndex].preco_total = (newItems[itemIndex].preco_unitario || 0) * quantidade;
-        console.log(`🔢 Totais recalculados - Custo: ${newItems[itemIndex].custo_total}, Preço: ${newItems[itemIndex].preco_total}`);
       }
       
       setPedidoItems(newItems);
-      console.log('🔄 Item atualizado:', newItems[itemIndex]);
-      console.log(`🔍 DEBUG: pedidoItems após atualização:`, newItems);
     }
   };
 
@@ -572,32 +733,38 @@ const Pedidos: React.FC = () => {
     setViewingPedido(pedido);
   };
 
-  // Funções para calcular custo e preço total dos itens
-  const calcularCustoTotal = (item: any) => {
-    if (!item.item_id || typeof item.quantidade !== 'number' || !selectedLicitacao) return 0;
-    
-    // Calcular custo unitário baseado no custo total da licitação e quantidade total dos itens
-    const custoTotalLicitacao = selectedLicitacao.custo || 0;
-    const quantidadeTotalLicitacao = availableItems.reduce((total, avItem) => total + avItem.quantidade_disponivel, 0);
-    
-    if (quantidadeTotalLicitacao === 0) return 0;
-    
-    const custoUnitario = custoTotalLicitacao / quantidadeTotalLicitacao;
-    return custoUnitario * item.quantidade;
+  // 🎯 NOVO: Função para fechar modal com confirmação
+  const handleCloseModal = async () => {
+    if (editingPedido) {
+      const confirmed = await confirm({
+        title: 'Sair da Edição',
+        message: 'Tem certeza que deseja sair da edição? As alterações não salvas serão perdidas.',
+        type: 'warning'
+      });
+      if (confirmed) {
+        setShowModal(false);
+        setEditingPedido(null);
+        resetForm();
+      }
+    } else {
+      const confirmed = await confirm({
+        title: 'Sair da Criação',
+        message: 'Tem certeza que deseja sair da criação do pedido? Os dados não salvos serão perdidos.',
+        type: 'warning'
+      });
+      if (confirmed) {
+        setShowModal(false);
+        setEditingPedido(null);
+        resetForm();
+      }
+    }
   };
 
-  const calcularPrecoTotal = (item: any) => {
-    if (!item.item_id || typeof item.quantidade !== 'number' || !selectedLicitacao) return 0;
-    
-    // Calcular preço unitário baseado no preço final da licitação e quantidade total dos itens
-    const precoFinalLicitacao = selectedLicitacao.preco_final || 0;
-    const quantidadeTotalLicitacao = availableItems.reduce((total, avItem) => total + avItem.quantidade_disponivel, 0);
-    
-    if (quantidadeTotalLicitacao === 0) return 0;
-    
-    const precoUnitario = precoFinalLicitacao / quantidadeTotalLicitacao;
-    return precoUnitario * item.quantidade;
+  // 🎯 NOVO: Função para fechar modal de visualização
+  const handleCloseViewModal = () => {
+    setViewingPedido(null);
   };
+
 
   const resetForm = () => {
     setFormData({
@@ -622,21 +789,14 @@ const Pedidos: React.FC = () => {
       observacoes_pagamento: ''
     });
     
-    // Resetar menus desplegáveis
-    setExpandedSections({
-      empenho: false,
-      pedido_orgao: false,
-      contrato: false,
-      outros_documentos: false,
-      entrega: false,
-      pagamento: false
-    });
     
     // 🎯 NOVO: Limpar dados do contrato
-    setSelectedLicitacao(null);
     setContratoData(null);
     setPedidoItems([]);
     setAvailableItems([]);
+    
+    // 🎯 CORRIGIDO: Limpar estado de edição
+    setEditingPedido(null);
   };
 
   const getStatusIcon = (status: string) => {
@@ -682,43 +842,6 @@ const Pedidos: React.FC = () => {
     });
   };
 
-  // 🎯 NOVO: Função para preencher o valor pago com o valor do contrato
-  const preencherValorPago = () => {
-    if (contratoData && contratoData.contrato_existe) {
-      // Usar o valor do contrato
-      const novoValor = Number(contratoData.contrato.valor_contrato) || 0;
-      setFormData(prev => ({
-        ...prev,
-        valor_pago: novoValor
-      }));
-    } else if (formData.licitacao_id) {
-      // Fallback para licitação se não tiver contrato
-      if (editingPedido) {
-        const novoValor = Number(editingPedido.licitacao.preco_final) || 0;
-        setFormData(prev => ({
-          ...prev,
-          valor_pago: novoValor
-        }));
-      }
-    }
-  };
-
-  // 🎯 NOVO: Funções para calcular custo e preço total dos itens (contrato ou licitação)
-  const calcularCustoTotalContrato = (item: any, quantidade: number) => {
-    if (!quantidade) return 0;
-    
-    // Se for item do contrato
-    if (item.custo_unitario_contrato) {
-      return item.custo_unitario_contrato * quantidade;
-    }
-    
-    // Se for item da licitação
-    if (item.custo_unitario) {
-      return item.custo_unitario * quantidade;
-    }
-    
-    return 0;
-  };
 
   const calcularPrecoTotalContrato = (item: any, quantidade: number) => {
     if (!quantidade) return 0;
@@ -956,14 +1079,22 @@ const Pedidos: React.FC = () => {
 
             {/* Modal de Criação/Edição Avançado */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div 
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+          onClick={(e) => {
+            // 🎯 NOVO: Fechar modal ao clicar fora
+            if (e.target === e.currentTarget) {
+              handleCloseModal();
+            }
+          }}
+        >
           <div className="relative top-10 mx-auto p-6 border w-11/12 md:w-4/5 lg:w-3/4 xl:w-2/3 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-semibold text-gray-900">
                 {editingPedido ? 'Editar Pedido' : 'Novo Pedido'}
               </h3>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={handleCloseModal}
                 className="text-gray-400 hover:text-gray-600 text-xl font-bold"
               >
                 ×
@@ -1000,24 +1131,19 @@ const Pedidos: React.FC = () => {
                     
                     {/* 🎯 NOVO: Mensagem informativa sobre contratos ativos */}
                     {contratos && contratos.length === 0 && (
-                      <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
-                        <p className="text-sm text-yellow-700">
-                          ℹ️ Apenas contratos com status "ATIVO" são exibidos para criação de pedidos.
-                        </p>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const debug = await contratoService.debugContratos();
-                              console.log('🔍 DEBUG Contratos:', debug);
-                              alert(`Debug: ${JSON.stringify(debug, null, 2)}`);
-                            } catch (error) {
-                              console.error('Erro no debug:', error);
-                            }
-                          }}
-                          className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                        >
-                          🔍 Debug Contratos
-                        </button>
+                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <div className="ml-3">
+                            <p className="text-sm text-yellow-700">
+                              Apenas contratos com status "ATIVO" são exibidos para criação de pedidos.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1037,20 +1163,7 @@ const Pedidos: React.FC = () => {
                         <div className="mt-2 p-2 bg-green-100 rounded border border-green-200">
                           <p className="text-xs text-green-700 font-medium">✅ Contrato ativo - pronto para gerar pedidos</p>
                         </div>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const debug = await contratoService.debugItensContrato(contratoData.contrato.id);
-                              console.log('🔍 DEBUG Itens do Contrato:', debug);
-                              alert(`Debug Itens: ${JSON.stringify(debug, null, 2)}`);
-                            } catch (error) {
-                              console.error('Erro no debug de itens:', error);
-                            }
-                          }}
-                          className="mt-2 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                        >
-                          🔍 Debug Itens
-                        </button>
+
                       </div>
                     </div>
                   )}
@@ -1094,268 +1207,143 @@ const Pedidos: React.FC = () => {
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <div className="flex justify-between items-center mb-3">
                     <h4 className="text-lg font-medium text-green-900">📋 Itens para o Pedido</h4>
-                    <div className="text-sm text-green-700 bg-green-100 px-2 py-1 rounded">
-                      {contratoData.itens.length} itens disponíveis
+                    <div className="flex items-center space-x-2">
+                      <div className="text-sm text-green-700 bg-green-100 px-2 py-1 rounded">
+                        {contratoData.itens.length} itens disponíveis
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // 🎯 NOVO: Abrir modal para adicionar itens
+                          setShowAddItemModal(true);
+                        }}
+                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                      >
+                        + Adicionar Item
+                      </button>
                     </div>
                   </div>
                   
-                  {/* 🎯 NOVO: Mostrar grupos da licitação */}
-                  {contratoData.grupos_licitacao && contratoData.grupos_licitacao.length > 0 && (
-                    <div className="mb-4">
-                      <h5 className="font-medium text-green-800 mb-2">📦 Grupos da Licitação</h5>
-                      <div className="space-y-3">
-                        {contratoData.grupos_licitacao.map((grupo, grupoIndex) => (
-                          <div key={grupoIndex} className="bg-blue-50 p-3 rounded border border-blue-200">
-                            <div className="flex justify-between items-center mb-2">
-                              <h6 className="font-medium text-blue-800">
-                                {grupo.posicao}º Grupo: {grupo.nome}
-                              </h6>
-                              <span className="text-sm text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                                {grupo.itens.length} itens
-                              </span>
-                            </div>
-                            
-                            {/* Itens do grupo */}
-                            {grupo.itens
-                              .filter(item => {
-                                // 🎯 CORRIGIDO: Mostrar todos os itens, mesmo com quantidade 0
-                                // Só filtrar se o usuário explicitamente removeu (quantidade === 0 E existe no pedidoItems)
-                                const pedidoItem = pedidoItems.find(pi => pi.item_id === item.id);
-                                if (pedidoItem && pedidoItem.quantidade === 0) {
-                                  console.log(`🔍 Item ${item.descricao} foi removido pelo usuário`);
-                                  return false; // Não mostrar itens explicitamente removidos
-                                }
-                                return true; // Mostrar todos os outros itens
-                              })
-                              .map((item, itemIndex) => (
-                              <div key={itemIndex} className="bg-white p-2 rounded border ml-4 mb-2">
-                                <div className="grid grid-cols-1 md:grid-cols-6 gap-2 text-sm">
-                                  <div>
-                                    <span className="font-medium">Item:</span>
-                                    <div className="text-gray-700">{item.descricao}</div>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium">Quantidade:</span>
-                                                                        <div>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max={item.quantidade}
-                                        value={pedidoItems.find(pi => pi.item_id === item.id)?.quantidade || item.quantidade}
-                                        onChange={(e) => handleItemChange(
-                                          item.id, 
-                                          'quantidade', 
-                                          e.target.value === '' ? '' : Number(e.target.value)
-                                        )}
-                                        className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-                                        placeholder={`Max: ${item.quantidade}`}
-                                      />
-                                      <div className="text-xs text-gray-500 mt-1">
-                                        Máx: {item.quantidade} | Disponível: {item.quantidade} | Digite 0 para remover
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium">Custo Unit.:</span>
-                                    <div className="text-gray-700">R$ {item.custo_unitario?.toFixed(2) || '0,00'}</div>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium">Preço Unit.:</span>
-                                    <div className="text-gray-700">R$ {item.preco_unitario?.toFixed(2) || '0,00'}</div>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium">Total:</span>
-                                    <div className="text-gray-700">
-                                      R$ {calcularPrecoTotalContrato(item, pedidoItems.find(pi => pi.item_id === item.id)?.quantidade || item.quantidade).toFixed(2)}
-                                    </div>
-                                  </div>
-                                  <div className="flex justify-center items-center">
-                                    <button
-                                      type="button"
-                                                                        onClick={() => {
-                                    if (confirm('Tem certeza que deseja remover este item do pedido?')) {
-                                      // Marcar item como removido (quantidade 0) em vez de deletar
-                                      const itemIndex = pedidoItems.findIndex(pi => pi.item_id === item.id);
-                                      if (itemIndex !== -1) {
-                                        const newItems = [...pedidoItems];
-                                        newItems[itemIndex] = { ...newItems[itemIndex], quantidade: 0 };
-                                        setPedidoItems(newItems);
-                                        console.log('🗑️ Item marcado como removido (quantidade 0):', item.descricao);
-                                      } else {
-                                        // Se não existir no pedido, criar com quantidade 0
-                                        const newItem = {
-                                          item_id: item.id,
-                                          quantidade: 0,
-                                          max_quantidade: item.quantidade,
-                                          custo_unitario: item.custo_unitario || 0,
-                                          preco_unitario: item.preco_unitario || 0,
-                                          custo_total: 0,
-                                          preco_total: 0
-                                        };
-                                        setPedidoItems([...pedidoItems, newItem]);
-                                        console.log('🗑️ Item criado e marcado como removido:', item.descricao);
-                                      }
-                                    }
-                                  }}
-                                      className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs transition-colors"
-                                      title="Remover item do pedido"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>
+                  {/* 🎯 NOVO: Área para itens adicionados manualmente */}
+                  <div className="mb-4">
+                    <h5 className="font-medium text-green-800 mb-2">📦 Itens do Pedido</h5>
+                    {pedidoItems.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <p>Nenhum item adicionado ao pedido ainda.</p>
+                        <p className="text-sm mt-1">Clique em "Adicionar Item" para começar.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {pedidoItems.map((item, index) => (
+                          <div key={index} className="bg-white p-3 rounded border">
+                            <div className="flex flex-wrap items-start gap-8">
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium">Item:</span>
+                                <div className="text-gray-700">
+                                  {getItemDescription(item.item_id)}
                                 </div>
                               </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* 🎯 NOVO: Mostrar itens sem grupo */}
-                  {contratoData.itens_licitacao && contratoData.itens_licitacao.length > 0 && (
-                    <div className="mb-4">
-                      <h5 className="font-medium text-green-800 mb-2">📋 Itens da Licitação (Sem Grupo)</h5>
-                      <div className="space-y-2">
-                        {contratoData.itens_licitacao
-                          .filter(item => {
-                            // 🎯 CORRIGIDO: Mostrar todos os itens, mesmo com quantidade 0
-                            // Só filtrar se o usuário explicitamente removeu (quantidade === 0 E existe no pedidoItems)
-                            const pedidoItem = pedidoItems.find(pi => pi.item_id === item.id);
-                            if (pedidoItem && pedidoItem.quantidade === 0) {
-                              console.log(`🔍 Item ${item.descricao} foi removido pelo usuário`);
-                              return false; // Não mostrar itens explicitamente removidos
-                            }
-                            return true; // Mostrar todos os outros itens
-                          })
-                          .map((item, index) => (
-                          <div key={index} className="bg-white p-3 rounded border">
-                            <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-                              <div>
-                                <span className="font-medium">Item:</span>
-                                <div className="text-gray-700">{item.descricao}</div>
-                              </div>
-                              <div>
+                              <div className="w-24">
                                 <span className="font-medium">Quantidade:</span>
                                 <div>
                                   <input
                                     type="number"
                                     min="0"
-                                    max={item.quantidade}
-                                    value={pedidoItems.find(pi => pi.item_id === item.id)?.quantidade || item.quantidade}
+                                    max={item.max_quantidade}
+                                    value={item.quantidade}
                                     onChange={(e) => handleItemChange(
-                                      item.id, 
+                                      item.item_id, 
                                       'quantidade', 
                                       e.target.value === '' ? '' : Number(e.target.value)
                                     )}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                    placeholder={`Max: ${item.quantidade}`}
+                                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                                    placeholder={`Max: ${item.max_quantidade}`}
                                   />
                                   <div className="text-xs text-gray-500 mt-1">
-                                    Máx: {item.quantidade} | Disponível: {item.quantidade} | Digite 0 para remover
+                                    Máx: {item.max_quantidade}
                                   </div>
                                 </div>
                               </div>
-                              <div>
+                              <div className="w-24">
                                 <span className="font-medium">Custo Unit.:</span>
-                                <div className="text-gray-700">R$ {item.custo_unitario?.toFixed(2) || '0,00'}</div>
+                                <div className="text-gray-700 text-sm">R$ {item.custo_unitario?.toFixed(2) || '0,00'}</div>
                               </div>
-                              <div>
+                              <div className="w-24">
                                 <span className="font-medium">Preço Unit.:</span>
-                                <div className="text-gray-700">R$ {item.preco_unitario?.toFixed(2) || '0,00'}</div>
+                                <div className="text-gray-700 text-sm">R$ {item.preco_unitario?.toFixed(2) || '0,00'}</div>
                               </div>
-                              <div>
+                              <div className="w-24">
                                 <span className="font-medium">Total:</span>
-                                <div className="text-gray-700">
-                                  R$ {calcularPrecoTotalContrato(item, pedidoItems.find(pi => pi.item_id === item.id)?.quantidade || item.quantidade).toFixed(2)}
+                                <div className="text-gray-700 text-sm">
+                                  R$ {calcularPrecoTotalContrato(
+                                    { id: item.item_id, custo_unitario: item.custo_unitario, preco_unitario: item.preco_unitario }, 
+                                    Number(item.quantidade) || 0
+                                  ).toFixed(2)}
                                 </div>
                               </div>
-                              <div className="flex justify-center items-center">
+                              <div className="w-16 flex justify-center">
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    if (confirm('Tem certeza que deseja remover este item do pedido?')) {
-                                      // Marcar item como removido (quantidade 0) em vez de deletar
-                                      const itemIndex = pedidoItems.findIndex(pi => pi.item_id === item.id);
-                                      if (itemIndex !== -1) {
-                                        const newItems = [...pedidoItems];
-                                        newItems[itemIndex] = { ...newItems[itemIndex], quantidade: 0 };
-                                        setPedidoItems(newItems);
-                                        console.log('🗑️ Item marcado como removido (quantidade 0):', item.descricao);
-                                      } else {
-                                        // Se não existir no pedido, criar com quantidade 0
-                                        const newItem = {
-                                          item_id: item.id,
-                                          quantidade: 0,
-                                          max_quantidade: item.quantidade,
-                                          custo_unitario: item.custo_unitario || 0,
-                                          preco_unitario: item.preco_unitario || 0,
-                                          custo_total: 0,
-                                          preco_total: 0
-                                        };
-                                        setPedidoItems([...pedidoItems, newItem]);
-                                        console.log('🗑️ Item criado e marcado como removido:', item.descricao);
-                                      }
-                                    }
-                                  }}
+                                  onClick={() => removeItemFromPedido(index)}
                                   className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs transition-colors"
                                   title="Remover item do pedido"
                                 >
-                                  🗑️
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                   
-                  {/* Mensagem se não houver itens */}
-                  {(!contratoData.grupos_licitacao || contratoData.grupos_licitacao.length === 0) && 
-                   (!contratoData.itens_licitacao || contratoData.itens_licitacao.length === 0) && (
-                    <p className="text-gray-500 text-sm">Nenhum item encontrado na licitação.</p>
-                  )}
+
+                  
+
                   
                   {/* Resumo financeiro */}
-                  {contratoData.itens.length > 0 && (
-                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
-                      <h5 className="font-medium text-blue-800 mb-2">💰 Resumo Financeiro do Pedido</h5>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="font-medium">Total de Itens:</span>
-                          <div className="text-blue-700">{contratoData.itens.length}</div>
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                    <h5 className="font-medium text-blue-800 mb-2">💰 Resumo Financeiro do Pedido</h5>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium">Total de Itens:</span>
+                        <div className="text-blue-700">
+                          {pedidoItems.filter(item => item.quantidade && Number(item.quantidade) > 0).length}
                         </div>
-                        <div>
-                          <span className="font-medium">Quantidade Total:</span>
-                          <div className="text-blue-700">
-                            {contratoData.itens.reduce((total, item) => {
-                              const pedidoItem = pedidoItems.find(pi => pi.item_id === item.id);
-                              return total + (pedidoItem?.quantidade || item.quantidade || 0);
-                            }, 0)}
-                          </div>
+                      </div>
+                      <div>
+                        <span className="font-medium">Quantidade Total:</span>
+                        <div className="text-blue-700">
+                          {pedidoItems.reduce((total, item) => {
+                            return total + (Number(item.quantidade) || 0);
+                          }, 0)}
                         </div>
-                        <div>
-                          <span className="font-medium">Custo Total:</span>
-                          <div className="text-blue-700">
-                            R$ {contratoData.itens.reduce((total, item) => {
-                              const pedidoItem = pedidoItems.find(pi => pi.item_id === item.id);
-                              return total + calcularCustoTotalContrato(item, pedidoItem?.quantidade || item.quantidade || 0);
-                            }, 0).toFixed(2)}
-                          </div>
+                      </div>
+                      <div>
+                        <span className="font-medium">Custo Total:</span>
+                        <div className="text-blue-700">
+                          R$ {pedidoItems.reduce((total, item) => {
+                            if (item.quantidade && Number(item.quantidade) > 0) {
+                              return total + (item.custo_unitario || 0) * Number(item.quantidade);
+                            }
+                            return total;
+                          }, 0).toFixed(2)}
                         </div>
-                        <div>
-                          <span className="font-medium">Preço Total:</span>
-                          <div className="text-blue-700">
-                            R$ {contratoData.itens.reduce((total, item) => {
-                              const pedidoItem = pedidoItems.find(pi => pi.item_id === item.id);
-                              return total + calcularPrecoTotalContrato(item, pedidoItem?.quantidade || item.quantidade || 0);
-                            }, 0).toFixed(2)}
-                          </div>
+                      </div>
+                      <div>
+                        <span className="font-medium">Preço Total:</span>
+                        <div className="text-blue-700">
+                          R$                           {pedidoItems.reduce((total, item) => {
+                            if (item.quantidade && Number(item.quantidade) > 0) {
+                              return total + (item.preco_unitario || 0) * Number(item.quantidade);
+                            }
+                            return total;
+                          }, 0).toFixed(2)}
                         </div>
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
 
@@ -1549,7 +1537,7 @@ const Pedidos: React.FC = () => {
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={handleCloseModal}
                   className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >
                   Cancelar
@@ -1569,7 +1557,15 @@ const Pedidos: React.FC = () => {
 
       {/* Modal de Visualização */}
       {viewingPedido && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div 
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+          onClick={(e) => {
+            // 🎯 NOVO: Fechar modal ao clicar fora
+            if (e.target === e.currentTarget) {
+              handleCloseViewModal();
+            }
+          }}
+        >
           <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-2/3 shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <div className="flex justify-between items-center mb-4">
@@ -1577,7 +1573,7 @@ const Pedidos: React.FC = () => {
                   Detalhes do Pedido
                 </h3>
                 <button
-                  onClick={() => setViewingPedido(null)}
+                  onClick={handleCloseViewModal}
                   className="text-gray-400 hover:text-gray-600"
                 >
                                      <XCircle className="h-6 w-6" />
@@ -1619,89 +1615,76 @@ const Pedidos: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Empenho */}
+                {/* Itens do Pedido */}
                 <div className="border-b pb-4">
-                  <h4 className="text-md font-medium text-gray-900 mb-2">Empenho</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                                             {viewingPedido.empenho_feito ? (
-                         <CheckCircle className="h-5 w-5 text-green-500" />
-                       ) : (
-                         <XCircle className="h-5 w-5 text-red-500" />
-                       )}
-                      <span className="text-sm text-gray-900">
-                        {viewingPedido.empenho_feito ? 'Realizado' : 'Não realizado'}
-                      </span>
-                    </div>
-                    {viewingPedido.empenho_data && (
-                      <div>
-                        <span className="text-sm font-medium text-gray-500">Data:</span>
-                        <p className="text-sm text-gray-900">{formatDate(viewingPedido.empenho_data)}</p>
+                  <h4 className="text-md font-medium text-gray-900 mb-2">Itens do Pedido</h4>
+                  {viewingPedido.itens_pedido && viewingPedido.itens_pedido.length > 0 ? (
+                    <div className="space-y-3">
+                      {viewingPedido.itens_pedido.map((itemPedido: any, index: number) => (
+                        <div key={index} className="bg-gray-50 p-3 rounded-lg border">
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="md:col-span-2">
+                              <span className="text-sm font-medium text-gray-500">Descrição:</span>
+                              <p className="text-sm text-gray-900">
+                                {itemPedido.item_licitacao?.descricao || `Item ${itemPedido.item_licitacao_id}`}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-gray-500">Quantidade:</span>
+                              <p className="text-sm text-gray-900">{itemPedido.quantidade_solicitada}</p>
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-gray-500">Preço Total:</span>
+                              <p className="text-sm text-gray-900 font-semibold">
+                                {formatCurrency(itemPedido.preco_total || 0)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                            <div>
+                              <span className="text-sm font-medium text-gray-500">Preço Unitário:</span>
+                              <p className="text-sm text-gray-900">{formatCurrency(itemPedido.preco_unitario || 0)}</p>
+                            </div>
+                            <div>
+                              <span className="text-sm font-medium text-gray-500">Custo Unitário:</span>
+                              <p className="text-sm text-gray-900">{formatCurrency(itemPedido.custo_unitario || 0)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {/* Resumo Financeiro */}
+                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 mt-4">
+                        <h5 className="font-medium text-blue-800 mb-2">💰 Resumo Financeiro</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <span className="font-medium text-blue-700">Total de Itens:</span>
+                            <div className="text-blue-900 font-semibold">
+                              {viewingPedido.itens_pedido.length}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="font-medium text-blue-700">Quantidade Total:</span>
+                            <div className="text-blue-900 font-semibold">
+                              {viewingPedido.itens_pedido.reduce((total: number, item: any) => 
+                                total + (item.quantidade_solicitada || 0), 0
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="font-medium text-blue-700">Valor Total:</span>
+                            <div className="text-blue-900 font-semibold text-lg">
+                              {formatCurrency(viewingPedido.itens_pedido.reduce((total: number, item: any) => 
+                                total + (item.preco_total || 0), 0
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  {viewingPedido.empenho_observacoes && (
-                    <div className="mt-2">
-                      <span className="text-sm font-medium text-gray-500">Observações:</span>
-                      <p className="text-sm text-gray-900">{viewingPedido.empenho_observacoes}</p>
                     </div>
-                  )}
-                </div>
-
-                {/* Pedido do Órgão */}
-                <div className="border-b pb-4">
-                  <h4 className="text-md font-medium text-gray-900 mb-2">Pedido do Órgão</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                                             {viewingPedido.pedido_orgao_feito ? (
-                         <CheckCircle className="h-5 w-5 text-green-500" />
-                       ) : (
-                         <XCircle className="h-5 w-5 text-red-500" />
-                       )}
-                      <span className="text-sm text-gray-900">
-                        {viewingPedido.pedido_orgao_feito ? 'Realizado' : 'Não realizado'}
-                      </span>
-                    </div>
-                    {viewingPedido.pedido_orgao_data && (
-                      <div>
-                        <span className="text-sm font-medium text-gray-500">Data:</span>
-                        <p className="text-sm text-gray-900">{formatDate(viewingPedido.pedido_orgao_data)}</p>
-                      </div>
-                    )}
-                  </div>
-                  {viewingPedido.pedido_orgao_observacoes && (
-                    <div className="mt-2">
-                      <span className="text-sm font-medium text-gray-500">Observações:</span>
-                      <p className="text-sm text-gray-900">{viewingPedido.pedido_orgao_observacoes}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Contrato */}
-                <div className="border-b pb-4">
-                  <h4 className="text-md font-medium text-gray-900 mb-2">Contrato</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                                             {viewingPedido.contrato_feito ? (
-                         <CheckCircle className="h-5 w-5 text-green-500" />
-                       ) : (
-                         <XCircle className="h-5 w-5 text-red-500" />
-                       )}
-                      <span className="text-sm text-gray-900">
-                        {viewingPedido.contrato_feito ? 'Assinado' : 'Não assinado'}
-                      </span>
-                    </div>
-                    {viewingPedido.contrato_data && (
-                      <div>
-                        <span className="text-sm font-medium text-gray-500">Data:</span>
-                        <p className="text-sm text-gray-900">{formatDate(viewingPedido.contrato_data)}</p>
-                      </div>
-                    )}
-                  </div>
-                  {viewingPedido.contrato_observacoes && (
-                    <div className="mt-2">
-                      <span className="text-sm font-medium text-gray-500">Observações:</span>
-                      <p className="text-sm text-gray-900">{viewingPedido.contrato_observacoes}</p>
+                  ) : (
+                    <div className="text-center py-4 text-gray-500">
+                      <p>Nenhum item adicionado ao pedido.</p>
                     </div>
                   )}
                 </div>
@@ -1810,6 +1793,167 @@ const Pedidos: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 🎯 NOVO: Modal para adicionar itens */}
+      {showAddItemModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            // 🎯 NOVO: Fechar modal ao clicar fora
+            if (e.target === e.currentTarget) {
+              setShowAddItemModal(false);
+            }
+          }}
+        >
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Adicionar Itens ao Pedido</h3>
+              <button
+                onClick={() => setShowAddItemModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Grupos */}
+              {contratoData?.grupos_licitacao && contratoData.grupos_licitacao.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-800 mb-3">📦 Grupos da Licitação</h4>
+                  <div className="space-y-3">
+                    {contratoData.grupos_licitacao.map((grupo: any, grupoIndex: any) => (
+                      <div key={grupoIndex} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex justify-between items-center mb-3">
+                          <h5 className="font-medium text-blue-800">Grupo: {grupo.nome || grupo.id}</h5>
+                          <span className="text-sm text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                            {grupo.itens.length} itens
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          {grupo.itens.map((item: any, itemIndex: any) => (
+                            <div key={itemIndex} className="flex items-center justify-between p-3 bg-gray-50 rounded border">
+                              <div className="flex-1">
+                                <div className="font-medium">{item.descricao}</div>
+                                <div className="text-sm text-gray-600">
+                                  Disponível: {availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0}
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0}
+                                  placeholder="Qtd"
+                                  disabled={(availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0) <= 0}
+                                  className={`w-20 px-2 py-1 border border-gray-300 rounded text-sm ${
+                                    (availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0) <= 0 
+                                      ? 'bg-gray-100 cursor-not-allowed' 
+                                      : ''
+                                  }`}
+                                  id={`qtd-${item.id}`}
+                                />
+                                <button
+                                  onClick={() => {
+                                    const quantidade = Number((document.getElementById(`qtd-${item.id}`) as HTMLInputElement)?.value);
+                                    if (quantidade > 0) {
+                                      addItemToPedido(item.id, quantidade);
+                                    }
+                                  }}
+                                  disabled={(availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0) <= 0}
+                                  className={`px-3 py-1 text-white text-sm rounded transition-colors ${
+                                    (availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0) <= 0
+                                      ? 'bg-gray-400 cursor-not-allowed'
+                                      : 'bg-green-600 hover:bg-green-700'
+                                  }`}
+                                >
+                                  + Adicionar
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Itens sem grupo */}
+              {contratoData?.itens_licitacao && contratoData.itens_licitacao.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-gray-800 mb-3">📋 Itens da Licitação (Sem Grupo)</h4>
+                  <div className="space-y-2">
+                    {contratoData.itens_licitacao.map((item: any, index: any) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded border">
+                        <div className="flex-1">
+                          <div className="font-medium">{item.descricao}</div>
+                          <div className="text-sm text-gray-600">
+                            Disponível: {availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="number"
+                            min="1"
+                            max={availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0}
+                            placeholder="Qtd"
+                            disabled={(availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0) <= 0}
+                            className={`w-20 px-2 py-1 border border-gray-300 rounded text-sm ${
+                              (availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0) <= 0 
+                                ? 'bg-gray-100 cursor-not-allowed' 
+                                : ''
+                            }`}
+                            id={`qtd-ungrouped-${item.id}`}
+                          />
+                          <button
+                            onClick={() => {
+                              const quantidade = Number((document.getElementById(`qtd-ungrouped-${item.id}`) as HTMLInputElement)?.value);
+                              if (quantidade > 0) {
+                                addItemToPedido(item.id, quantidade);
+                              }
+                            }}
+                            disabled={(availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0) <= 0}
+                            className={`px-3 py-1 text-white text-sm rounded transition-colors ${
+                              (availableItems.find(avItem => avItem.id === item.id)?.quantidade_disponivel || 0) <= 0
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-green-600 hover:bg-green-700'
+                            }`}
+                          >
+                            + Adicionar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowAddItemModal(false)}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🎯 NOVO: Alerta Customizado */}
+      <CustomAlert
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        onConfirm={alertState.onConfirm}
+        title={alertState.options.title}
+        message={alertState.options.message}
+        type={alertState.options.type}
+        confirmText={alertState.options.confirmText}
+        cancelText={alertState.options.cancelText}
+      />
     </div>
   );
 };

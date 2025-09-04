@@ -196,6 +196,7 @@ export interface Pedido {
   updated_at?: string;
   licitacao?: Licitacao;
   user_criador?: User;
+  itens_pedido?: ItemPedido[];  // 🎯 NOVO: Incluir itens do pedido
 }
 
 // Novos tipos para o sistema de pedidos

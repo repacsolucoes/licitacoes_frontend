@@ -535,6 +535,12 @@ export const pedidoService = {
     const response = await api.get('/pedidos/dashboard/stats');
     return response.data;
   },
+
+  // 🎯 NOVO: Buscar itens de um pedido específico
+  getItens: async (pedidoId: number): Promise<any[]> => {
+    const response = await api.get(`/pedidos/${pedidoId}/itens/`);
+    return response.data;
+  },
 };
 
 // Serviço de Contratos
@@ -625,6 +631,12 @@ export const contratoService = {
   // Debug de itens de contrato
   debugItensContrato: async (contratoId: number): Promise<any> => {
     const response = await api.get(`/pedidos/contratos/${contratoId}/itens`);
+    return response.data;
+  },
+
+  // 🎯 NOVO: Obter itens disponíveis para criar novos pedidos
+  obterItensParaPedido: async (contratoId: number): Promise<any> => {
+    const response = await api.get(`/pedidos/contratos/${contratoId}/itens-para-pedido`);
     return response.data;
   },
 };
