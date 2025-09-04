@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { LoginCredentials, AuthResponse, User, Cliente, Licitacao, DashboardStats, Documentacao, Pedido, PedidoCreate, PedidoUpdate, PedidoStats, ItemLicitacao, LicitacaoComItensCreate, LicitacaoComItens, Contrato, ContratoCreate, ContratoUpdate, ContratoStats } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8100/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://3.84.211.83:8100/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
