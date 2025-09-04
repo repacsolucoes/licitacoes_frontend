@@ -11,7 +11,8 @@ import GrupoForm from './GrupoForm';
 import GruposTable from './GruposTable';
 
 interface LicitacaoComItensFormProps {
-  onClose: () => void;
+  onClose: () => void; // 🎯 Para botão Cancelar (sem alerta)
+  onCloseWithConfirm: () => void; // 🎯 NOVO: Para botão X e click outside (com alerta)
   onSuccess: () => void;
   editingLicitacao?: Licitacao | null;
 }
@@ -22,7 +23,7 @@ interface Grupo {
   itens: ItemLicitacao[];
 }
 
-const LicitacaoComItensForm: React.FC<LicitacaoComItensFormProps> = ({ onClose, onSuccess, editingLicitacao }) => {
+const LicitacaoComItensForm: React.FC<LicitacaoComItensFormProps> = ({ onClose, onCloseWithConfirm, onSuccess, editingLicitacao }) => {
   const [formData, setFormData] = useState({
     descricao: '',
     uasg: '',
@@ -577,7 +578,15 @@ const LicitacaoComItensForm: React.FC<LicitacaoComItensFormProps> = ({ onClose, 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0"
+      onClick={(e) => {
+        // 🎯 CORRIGIDO: Clique fora do modal fecha com confirmação
+        if (e.target === e.currentTarget) {
+          onCloseWithConfirm(); // 🎯 Usar onCloseWithConfirm (com alerta)
+        }
+      }}
+    >
       <div className="bg-white rounded-lg max-w-6xl w-full max-h-[95vh] overflow-y-auto mx-12">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -594,7 +603,7 @@ const LicitacaoComItensForm: React.FC<LicitacaoComItensFormProps> = ({ onClose, 
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={onCloseWithConfirm} // 🎯 CORRIGIDO: Usar onCloseWithConfirm (com alerta)
             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <X size={24} />

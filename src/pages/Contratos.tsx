@@ -4,11 +4,16 @@ import { contratoService, licitacaoService } from '../services/api';
 import { Contrato, ContratoCreate, ContratoUpdate, Licitacao, LicitacaoComItens, ItemLicitacao } from '../types';
 import { Plus, Edit, Trash2, Eye, Search, Filter, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import CustomAlert from '../components/CustomAlert';
+import { useCustomAlert } from '../hooks/useCustomAlert';
+import toast from 'react-hot-toast'; // 🎯 NOVO: Import para notificações
 
 const Contratos: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const queryClient = useQueryClient();
+  const { alertState, hideAlert, confirm } = useCustomAlert();
   const [showModal, setShowModal] = useState(false);
+
   const [editingContrato, setEditingContrato] = useState<Contrato | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -20,7 +25,7 @@ const Contratos: React.FC = () => {
     data_contrato: '',
     valor_contrato: 0,
     tipo_entrega: 'ENTREGA_UNICA',
-    prazo_contrato: 0,
+    prazo_contrato: undefined as number | undefined, // 🎯 CORRIGIDO: undefined em vez de 0
     observacoes: '',
     status: 'ATIVO'
   });
@@ -63,7 +68,14 @@ const Contratos: React.FC = () => {
       setShowModal(false);
       setEditingContrato(null);
       resetForm();
+      toast.success('Contrato criado com sucesso!');
     },
+    onError: (error: any) => {
+      toast.error('Erro ao criar contrato. Tente novamente.');
+    },
+    onSettled: () => {
+      // 🎯 CORRIGIDO: Sempre resetar o estado de loading
+    }
   });
 
   const updateMutation = useMutation(
@@ -76,7 +88,14 @@ const Contratos: React.FC = () => {
         setShowModal(false);
         setEditingContrato(null);
         resetForm();
+        toast.success('Contrato atualizado com sucesso!');
       },
+      onError: (error: any) => {
+        toast.error('Erro ao atualizar contrato. Tente novamente.');
+      },
+      onSettled: () => {
+        // 🎯 CORRIGIDO: Sempre resetar o estado de loading
+      }
     }
   );
 
@@ -85,7 +104,14 @@ const Contratos: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries('contratos');
       queryClient.invalidateQueries('contratosStats');
+      toast.success('Contrato deletado com sucesso!');
     },
+    onError: (error: any) => {
+      toast.error('Erro ao deletar contrato. Tente novamente.');
+    },
+    onSettled: () => {
+      // 🎯 CORRIGIDO: Sempre resetar o estado de loading
+    }
   });
 
   // Filtrar contratos
@@ -109,13 +135,21 @@ const Contratos: React.FC = () => {
   const [gruposItens, setGruposItens] = useState<any[]>([]);
   const [resumoFinanceiro, setResumoFinanceiro] = useState<any>(null);
 
+
+
+  // 🎯 NOVO: Listener para tecla Enter no formulário
+  const handleFormKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      handleSubmit(event);
+    }
+  };
+
   // Carregar dados da licitação selecionada
   const handleLicitacaoChange = async (licitacaoId: string) => {
-    console.log('🔍 handleLicitacaoChange chamado com licitacaoId:', licitacaoId);
     if (licitacaoId) {
       const licitacao = licitacoes.find(l => l.id === parseInt(licitacaoId));
       if (licitacao) {
-        console.log('✅ Licitação encontrada:', licitacao);
         setSelectedLicitacao(licitacao);
         setFormData(prev => ({
           ...prev,
@@ -124,10 +158,8 @@ const Contratos: React.FC = () => {
         
         // Buscar dados do órgão se tiver UASG
         if (licitacao.uasg) {
-          console.log('🔍 UASG encontrado na licitação:', licitacao.uasg);
           try {
             const dadosOrgao = await contratoService.buscarDadosOrgao(licitacao.uasg);
-            console.log('✅ Dados do órgão recebidos:', dadosOrgao);
             if (dadosOrgao) {
               // Atualizar a licitação com os dados do órgão
               setSelectedLicitacao(prev => prev ? {
@@ -138,22 +170,15 @@ const Contratos: React.FC = () => {
                 codigo_municipio: dadosOrgao.codigo_municipio,
                 nome_municipio_ibge: dadosOrgao.nome_municipio_ibge
               } : null);
-              console.log('✅ Dados do órgão atualizados na licitação');
-            } else {
-              console.log('⚠️ Dados do órgão vazios ou nulos');
             }
           } catch (error) {
-            console.error('❌ Erro ao buscar dados do órgão:', error);
+            // Silenciar erro
           }
-        } else {
-          console.log('⚠️ UASG não encontrado na licitação selecionada');
         }
 
         // Buscar grupos e itens da licitação
         try {
-          console.log('🔍 Buscando grupos e itens da licitação...');
           const response = await contratoService.buscarGruposItensLicitacao(licitacao.id);
-          console.log('✅ Grupos e itens recebidos:', response);
           
           // Nova estrutura: { grupos_itens, resumo_financeiro }
           if (response.grupos_itens) {
@@ -165,19 +190,18 @@ const Contratos: React.FC = () => {
             setResumoFinanceiro(null);
           }
         } catch (error) {
-          console.error('❌ Erro ao buscar grupos e itens:', error);
           setGruposItens([]);
           setResumoFinanceiro(null);
         }
       } else {
-        console.log('❌ Licitação não encontrada para o ID:', licitacaoId);
         setSelectedLicitacao(null);
         setGruposItens([]);
+        setResumoFinanceiro(null);
       }
     } else {
-      console.log('⚠️ licitacaoId vazio, resetando seleção');
       setSelectedLicitacao(null);
       setGruposItens([]);
+      setResumoFinanceiro(null);
     }
   };
 
@@ -188,7 +212,7 @@ const Contratos: React.FC = () => {
       data_contrato: '',
       valor_contrato: 0,
       tipo_entrega: 'ENTREGA_UNICA',
-      prazo_contrato: 0,
+      prazo_contrato: undefined, // 🎯 CORRIGIDO: undefined em vez de 0
       observacoes: '',
       status: 'ATIVO'
     });
@@ -199,6 +223,7 @@ const Contratos: React.FC = () => {
 
   // Abrir modal para criar novo contrato
   const handleNewContrato = () => {
+    hideAlert(); // 🎯 CORRIGIDO: Limpar qualquer alerta aberto PRIMEIRO
     resetForm();
     setEditingContrato(null);
     setShowModal(true);
@@ -212,38 +237,30 @@ const Contratos: React.FC = () => {
 
   // Abrir modal para editar contrato
   const handleEditContrato = async (contrato: Contrato) => {
-    console.log('🔍 Editando contrato:', contrato);
     setEditingContrato(contrato);
     
     // Definir a licitação associada
     if (contrato.licitacao) {
-      console.log('✅ Licitação encontrada no contrato:', contrato.licitacao);
       setSelectedLicitacao(contrato.licitacao);
       
       // 🔍 CORREÇÃO: Buscar grupos e itens automaticamente
       try {
-        console.log('🔍 Buscando grupos e itens da licitação para edição...');
         const response = await contratoService.buscarGruposItensLicitacao(contrato.licitacao.id);
-        console.log('✅ Grupos e itens recebidos para edição:', response);
         
         // Nova estrutura: { grupos_itens, resumo_financeiro }
         if (response.grupos_itens) {
           setGruposItens(response.grupos_itens);
           setResumoFinanceiro(response.resumo_financeiro);
-          console.log('✅ Grupos e itens carregados para edição');
         } else {
           // Estrutura antiga (compatibilidade)
           setGruposItens(response);
           setResumoFinanceiro(null);
-          console.log('⚠️ Estrutura antiga usada para edição');
         }
       } catch (error) {
-        console.error('❌ Erro ao buscar grupos e itens para edição:', error);
         setGruposItens([]);
         setResumoFinanceiro(null);
       }
     } else {
-      console.log('❌ Nenhuma licitação associada ao contrato');
       setSelectedLicitacao(null);
       setGruposItens([]);
       setResumoFinanceiro(null);
@@ -255,13 +272,13 @@ const Contratos: React.FC = () => {
       data_contrato: contrato.data_contrato.split('T')[0],
       valor_contrato: contrato.valor_contrato,
       tipo_entrega: contrato.tipo_entrega,
-      prazo_contrato: contrato.prazo_contrato || 0,
+      prazo_contrato: contrato.prazo_contrato || undefined, // 🎯 CORRIGIDO: undefined em vez de 0
       observacoes: contrato.observacoes || '',
       status: contrato.status
     });
     
+    hideAlert(); // 🎯 CORRIGIDO: Limpar qualquer alerta aberto PRIMEIRO
     setShowModal(true);
-    console.log('✅ Modal de edição aberto com dados carregados');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -284,6 +301,77 @@ const Contratos: React.FC = () => {
       createMutation.mutate(contratoData as ContratoCreate);
     }
   };
+
+  // 🎯 NOVO: Função para fechar modal com confirmação
+  const handleCloseModal = async () => {
+    if (editingContrato) {
+      const confirmed = await confirm({
+        title: 'Sair da Edição',
+        message: 'Tem certeza que deseja sair da edição? As alterações não salvas serão perdidas.',
+        type: 'warning'
+      });
+      if (confirmed) {
+        setShowModal(false);
+        setEditingContrato(null);
+        resetForm();
+      }
+    } else {
+      const confirmed = await confirm({
+        title: 'Sair da Criação',
+        message: 'Tem certeza que deseja sair da criação do contrato? Os dados não salvos serão perdidos.',
+        type: 'warning'
+      });
+      if (confirmed) {
+        setShowModal(false);
+        setEditingContrato(null);
+        resetForm();
+      }
+    }
+  };
+
+  // 🎯 NOVO: Função para deletar com confirmação customizada
+  const handleDeleteWithConfirm = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Deletar Contrato',
+      message: 'Tem certeza que deseja deletar este contrato? Esta ação não pode ser desfeita.',
+      type: 'warning',
+      confirmText: 'Deletar',
+      cancelText: 'Cancelar'
+    });
+    if (confirmed) {
+      deleteMutation.mutate(id);
+    }
+  };
+
+  // 🎯 NOVO: Listener para tecla Esc para fechar modais
+  useEffect(() => {
+    // 🎯 CORRIGIDO: Só adicionar listener quando modal estiver aberto
+    if (!showModal && !showItemModal) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        // 🎯 CORRIGIDO: Não interferir quando CustomAlert estiver aberto
+        if (alertState.isOpen) {
+          return; // Deixar o CustomAlert lidar com ESC
+        }
+        
+        if (showModal) {
+          handleCloseModal();
+        }
+        if (showItemModal) {
+          setShowItemModal(false);
+          setViewingItem(null);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showModal, showItemModal, handleCloseModal]); // 🎯 REMOVIDO: alertState.isOpen da dependência
 
   const handleDelete = (id: number) => {
     if (window.confirm('Tem certeza que deseja deletar este contrato?')) {
@@ -434,7 +522,7 @@ const Contratos: React.FC = () => {
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(contrato.id)}
+                        onClick={() => handleDeleteWithConfirm(contrato.id)}
                         className="text-red-600 hover:text-red-900"
                         title="Deletar"
                       >
@@ -457,14 +545,22 @@ const Contratos: React.FC = () => {
 
       {/* Modal de Criar/Editar Contrato */}
       {showModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div 
+          className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+          onClick={(e) => {
+            // 🎯 NOVO: Clique fora do modal fecha com confirmação
+            if (e.target === e.currentTarget) {
+              handleCloseModal();
+            }
+          }}
+        >
           <div className="relative top-10 mx-auto p-5 border w-11/12 md:w-4/5 lg:w-3/4 xl:w-2/3 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {editingContrato ? 'Editar Contrato' : 'Novo Contrato'}
               </h3>
               
-              <form onSubmit={handleSubmit}>
+              <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown}>
                 {/* Seleção de Licitação */}
                 {!editingContrato && (
                   <div className="mb-6 p-4 bg-blue-50 rounded-lg">
@@ -584,8 +680,11 @@ const Contratos: React.FC = () => {
                     </label>
                     <input
                       type="number"
-                      value={formData.prazo_contrato}
-                      onChange={(e) => setFormData(prev => ({ ...prev, prazo_contrato: parseInt(e.target.value) || 0 }))}
+                      value={formData.prazo_contrato || ''} // 🎯 CORRIGIDO: '' em vez de undefined
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        prazo_contrato: e.target.value ? parseInt(e.target.value) : undefined 
+                      }))}
                       disabled={formData.tipo_entrega === 'ENTREGA_UNICA'}
                       className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                         formData.tipo_entrega === 'ENTREGA_UNICA' ? 'bg-gray-100 cursor-not-allowed' : ''
@@ -971,17 +1070,13 @@ const Contratos: React.FC = () => {
 
                 
                 <div className="flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowModal(false);
-                      setEditingContrato(null);
-                      resetForm();
-                    }}
-                    className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
-                  >
-                    Cancelar
-                  </button>
+                                      <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
+                    >
+                      Cancelar
+                    </button>
                   <button
                     type="submit"
                     className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
@@ -998,7 +1093,16 @@ const Contratos: React.FC = () => {
 
       {/* Modal para visualizar detalhes do item */}
       {showItemModal && viewingItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            // 🎯 NOVO: Clique fora do modal fecha
+            if (e.target === e.currentTarget) {
+              setShowItemModal(false);
+              setViewingItem(null);
+            }
+          }}
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
@@ -1109,6 +1213,18 @@ const Contratos: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 🎯 NOVO: Alerta Customizado */}
+      <CustomAlert
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        onConfirm={alertState.onConfirm}
+        title={alertState.options.title}
+        message={alertState.options.message}
+        type={alertState.options.type}
+        confirmText={alertState.options.confirmText}
+        cancelText={alertState.options.cancelText}
+      />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { licitacaoService, clienteService } from '../services/api';
 import { Licitacao, Cliente } from '../types';
@@ -8,8 +8,11 @@ import { RefreshButton } from '../components/RefreshButton';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import LicitacaoComItensForm from '../components/LicitacaoComItensForm';
+import CustomAlert from '../components/CustomAlert';
+import { useCustomAlert } from '../hooks/useCustomAlert';
 
 const Licitacoes: React.FC = () => {
+  const { alertState, hideAlert, confirm } = useCustomAlert();
   const [searchTerm, setSearchTerm] = useState('');
   const [showFormComItens, setShowFormComItens] = useState(false);
   const [editingLicitacao, setEditingLicitacao] = useState<Licitacao | null>(null);
@@ -74,11 +77,13 @@ const Licitacoes: React.FC = () => {
     try {
       // Buscar a licitação completa com todos os campos do órgão
       const licitacaoCompleta = await licitacaoService.getCompleta(licitacao.id);
+      hideAlert(); // 🎯 CORRIGIDO: Limpar qualquer alerta aberto PRIMEIRO
       setEditingLicitacao(licitacaoCompleta);
       setShowFormComItens(true);
     } catch (error) {
       console.error('Erro ao buscar licitação completa:', error);
       // Se falhar, usar a licitação da lista
+      hideAlert(); // 🎯 CORRIGIDO: Limpar qualquer alerta aberto PRIMEIRO
       setEditingLicitacao(licitacao);
       setShowFormComItens(true);
     }
@@ -99,6 +104,74 @@ const Licitacoes: React.FC = () => {
     setSelectedStatus('');
     setSearchTerm('');
   };
+
+
+
+  // 🎯 NOVO: Função para fechar modal com confirmação
+  const handleCloseFormWithConfirm = async () => {
+    if (editingLicitacao) {
+      const confirmed = await confirm({
+        title: 'Sair da Edição',
+        message: 'Tem certeza que deseja sair da edição? As alterações não salvas serão perdidas.',
+        type: 'warning'
+      });
+      if (confirmed) {
+        handleCloseForm();
+      }
+    } else {
+      const confirmed = await confirm({
+        title: 'Sair da Criação',
+        message: 'Tem certeza que deseja sair da criação da licitação? Os dados não salvos serão perdidos.',
+        type: 'warning'
+      });
+      if (confirmed) {
+        handleCloseForm();
+      }
+    }
+  };
+
+  // 🎯 NOVO: Função para deletar com confirmação customizada
+  const handleDeleteWithConfirm = async (id: number) => {
+    const confirmed = await confirm({
+      title: 'Deletar Licitação',
+      message: 'Tem certeza que deseja deletar esta licitação? Esta ação não pode ser desfeita.',
+      type: 'warning',
+      confirmText: 'Deletar',
+      cancelText: 'Cancelar'
+    });
+    if (confirmed) {
+      deleteLicitacaoMutation.mutate(id);
+    }
+  };
+
+  // 🎯 NOVO: Listener para tecla Esc para fechar modais
+  useEffect(() => {
+    // 🎯 CORRIGIDO: Só adicionar listener quando modal estiver aberto
+    if (!showFormComItens && !viewingLicitacao) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        // 🎯 CORRIGIDO: Não interferir quando CustomAlert estiver aberto
+        if (alertState.isOpen) {
+          return; // Deixar o CustomAlert lidar com ESC
+        }
+        
+        if (showFormComItens) {
+          handleCloseFormWithConfirm();
+        }
+        if (viewingLicitacao) {
+          setViewingLicitacao(null);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showFormComItens, viewingLicitacao, handleCloseFormWithConfirm]); // 🎯 REMOVIDO: alertState.isOpen da dependência
 
   const filteredLicitacoes = licitacoes.filter(licitacao => {
     if (searchTerm && !licitacao.descricao.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -132,6 +205,7 @@ const Licitacoes: React.FC = () => {
           <RefreshButton refreshType="licitacoes" />
           <button
             onClick={() => {
+              hideAlert(); // 🎯 CORRIGIDO: Limpar qualquer alerta aberto PRIMEIRO
               setEditingLicitacao(null); // Garantir que não há licitação em edição
               setShowFormComItens(true);
             }}
@@ -339,7 +413,7 @@ const Licitacoes: React.FC = () => {
                   <Edit size={16} />
                 </button>
                 <button
-                  onClick={() => handleDelete(licitacao.id)}
+                  onClick={() => handleDeleteWithConfirm(licitacao.id)}
                   className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
                   title="Excluir"
                 >
@@ -354,11 +428,24 @@ const Licitacoes: React.FC = () => {
       {/* Modal de formulário com itens */}
       {showFormComItens && (
         <LicitacaoComItensForm
-          onClose={handleCloseForm}
+          onClose={handleCloseForm} // 🎯 Para botão Cancelar (sem alerta)
+          onCloseWithConfirm={handleCloseFormWithConfirm} // 🎯 NOVO: Para botão X e click outside (com alerta)
           onSuccess={handleFormSuccess}
           editingLicitacao={editingLicitacao}
         />
       )}
+
+      {/* 🎯 NOVO: Alerta Customizado */}
+      <CustomAlert
+        isOpen={alertState.isOpen}
+        onClose={hideAlert}
+        onConfirm={alertState.onConfirm}
+        title={alertState.options.title}
+        message={alertState.options.message}
+        type={alertState.options.type}
+        confirmText={alertState.options.confirmText}
+        cancelText={alertState.options.cancelText}
+      />
     </div>
   );
 };
