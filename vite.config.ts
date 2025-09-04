@@ -9,7 +9,7 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://localhost:8100',
+        target: 'http://3.84.211.83:8100',  // IP da instância EC2
         changeOrigin: true,
         timeout: 10000,
         secure: false,
