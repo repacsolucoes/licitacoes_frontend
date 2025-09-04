@@ -162,22 +162,7 @@ const Pedidos: React.FC = () => {
       // Carregar pedidos
       try {
         const pedidosData = await pedidoService.list();
-        console.log('🎯 TODOS OS PEDIDOS CARREGADOS:', pedidosData);
         
-        // 🎯 DEBUG: Verificar se data_pagamento_previsto está presente
-        const pedido43 = pedidosData.find((p: any) => p.id === 43);
-        if (pedido43) {
-          console.log('🎯 DEBUG - Pedido 43 da API:', pedido43);
-          console.log('🎯 DEBUG - data_pagamento_previsto:', pedido43.data_pagamento_previsto);
-        }
-        
-        // 🎯 TESTE: Filtrar pedidos da Francieli Cristina
-        const pedidosFrancieli = pedidosData.filter((pedido: any) => {
-          return pedido.user_criador?.full_name?.includes('FRANCIELI') || 
-                 pedido.user_criador?.full_name?.includes('Francieli') ||
-                 pedido.user_criador?.email?.includes('francieli');
-        });
-        console.log('🎯 PEDIDOS DA FRANCIELI:', pedidosFrancieli);
         
         setPedidos(pedidosData as PedidoWithDetails[]);
       } catch (error: any) {
@@ -194,28 +179,8 @@ const Pedidos: React.FC = () => {
 
       // 🎯 NOVO: Carregar contratos (para criar novos pedidos)
       
-      // Aguardar um pouco para garantir que o usuário está carregado
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Testar autenticação primeiro
       try {
-        const authResponse = await fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/auth/me`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        if (!authResponse.ok) {
-          // Falha na autenticação
-        }
-      } catch (authError) {
-        // Erro no teste de autenticação
-      }
-      
-      try {
-        console.log('🎯 Carregando contratos na função carregarDados...');
         const contratosData = await contratoService.listarContratos();
-        console.log('🎯 Contratos carregados:', contratosData);
         setContratos(contratosData);
       } catch (error: any) {
         console.error('🎯 Erro ao carregar contratos:', error);
@@ -272,20 +237,10 @@ const Pedidos: React.FC = () => {
         }, 0)
       };
       
-      // 🎯 DEBUG: Log dos dados que serão enviados
-      console.log('🔍 Dados completos para envio:', dadosCompletos);
-      console.log('🔍 Campos de pagamento:', {
-        status_pagamento: dadosCompletos.status_pagamento,
-        valor_pago: dadosCompletos.valor_pago,
-        data_pagamento: dadosCompletos.data_pagamento,
-        observacoes_pagamento: dadosCompletos.observacoes_pagamento
-      });
 
       if (editingPedido) {
-        console.log('🔍 Atualizando pedido:', editingPedido.id);
         await pedidoService.update(editingPedido.id, dadosCompletos as any);
       } else {
-        console.log('🔍 Criando novo pedido');
         await pedidoService.create(dadosCompletos as any);
       }
       
@@ -312,39 +267,8 @@ const Pedidos: React.FC = () => {
     }
   };
 
-  // 🎯 TESTE: Função para testar edição de pedido da Francieli
-  const testarEdicaoFrancieli = async () => {
-    try {
-      const pedidosData = await pedidoService.list();
-      console.log('🎯 TESTE: Todos os pedidos carregados:', pedidosData);
-      
-      const pedidosFrancieli = pedidosData.filter((pedido: any) => {
-        return pedido.user_criador?.full_name?.includes('FRANCIELI') || 
-               pedido.user_criador?.full_name?.includes('Francieli') ||
-               pedido.user_criador?.email?.includes('francieli');
-      });
-      
-      console.log('🎯 TESTE: Pedidos da Francieli filtrados:', pedidosFrancieli);
-      
-      if (pedidosFrancieli.length > 0) {
-        const pedidoTeste = pedidosFrancieli[0];
-        console.log('🎯 TESTE: Pedido específico para teste:', pedidoTeste);
-        console.log('🎯 TESTE: Licitação ID do pedido:', pedidoTeste.licitacao_id);
-        console.log('🎯 TESTE: Tipo do licitacao_id:', typeof pedidoTeste.licitacao_id);
-        
-        await handleEdit(pedidoTeste as PedidoWithDetails);
-      } else {
-        console.log('🎯 TESTE: Nenhum pedido da Francieli encontrado');
-      }
-    } catch (error) {
-      console.error('🎯 TESTE: Erro ao testar edição:', error);
-    }
-  };
 
   const handleEdit = async (pedido: PedidoWithDetails) => {
-    console.log('🎯 INÍCIO handleEdit - pedido:', pedido);
-    console.log('🎯 pedido.licitacao_id:', pedido.licitacao_id);
-    console.log('🎯 pedido.user_criador:', pedido.user_criador);
     setEditingPedido(pedido);
     
     // 🎯 CORRIGIDO: Carregar dados do contrato para esta licitação
@@ -352,27 +276,19 @@ const Pedidos: React.FC = () => {
       // Primeiro, garantir que temos os contratos carregados
       let contratosAtivos = contratos;
       if (contratosAtivos.length === 0) {
-        console.log('🎯 Contratos não carregados, buscando...');
         contratosAtivos = await contratoService.listarContratos();
         setContratos(contratosAtivos);
       }
-      console.log('🎯 Contratos ativos encontrados:', contratosAtivos);
       const contratoAtivo = contratosAtivos.find((c: any) => {
         const contratoLicitacaoId = Number(c.licitacao.id);
         const pedidoLicitacaoId = Number(pedido.licitacao_id);
-        console.log('🎯 Comparando:', contratoLicitacaoId, '===', pedidoLicitacaoId, '?', contratoLicitacaoId === pedidoLicitacaoId);
-        console.log('🎯 Tipos:', typeof contratoLicitacaoId, typeof pedidoLicitacaoId);
-        console.log('🎯 Contrato completo:', c);
         return contratoLicitacaoId === pedidoLicitacaoId;
       });
-      console.log('🎯 Contrato ativo encontrado:', contratoAtivo);
       
       if (contratoAtivo) {
-        console.log('🎯 Contrato encontrado para edição:', contratoAtivo);
         
         // Usar o mesmo endpoint que a criação usa
         const contratoData = await contratoService.obterItensParaPedido(contratoAtivo.id);
-        console.log('🎯 Dados do contrato obtidos:', contratoData);
         
         // 🎯 CORRIGIDO: Sempre mapear dados do contrato, mesmo se não houver itens disponíveis
         const contratoDataMapeado = {
@@ -389,8 +305,6 @@ const Pedidos: React.FC = () => {
         };
         
         setContratoData(contratoDataMapeado);
-        console.log('🎯 ContratoData definido:', contratoDataMapeado);
-        console.log('🎯 Contrato ID para o select:', contratoDataMapeado.contrato?.id);
         
         // 🎯 CORRIGIDO: Para edição, carregar os itens que já existem no pedido
         if (pedido.itens_pedido && pedido.itens_pedido.length > 0) {
@@ -408,10 +322,8 @@ const Pedidos: React.FC = () => {
           });
           
           setPedidoItems(itensExistentes);
-          console.log('🎯 Itens do pedido carregados:', itensExistentes);
         } else {
           setPedidoItems([]);
-          console.log('🎯 Nenhum item no pedido para carregar');
         }
           
         // Atualizar itens disponíveis baseados no contrato
@@ -421,7 +333,6 @@ const Pedidos: React.FC = () => {
           quantidade_disponivel: item.quantidade || 0
         })));
       } else {
-        console.log('🎯 Nenhum contrato ativo encontrado para esta licitação');
         setContratoData(null);
         setAvailableItems([]);
         setPedidoItems([]);
@@ -438,10 +349,6 @@ const Pedidos: React.FC = () => {
       return total + (item.preco_total || 0);
     }, 0) : 0;
 
-    // 🎯 DEBUG: Log da data prevista
-    console.log('🎯 DEBUG - Data prevista do pedido:', pedido.data_pagamento_previsto);
-    console.log('🎯 DEBUG - Tipo da data:', typeof pedido.data_pagamento_previsto);
-    console.log('🎯 DEBUG - Pedido completo:', pedido);
     
     const formDataToSet = {
       licitacao_id: pedido.licitacao_id,
@@ -477,8 +384,6 @@ const Pedidos: React.FC = () => {
       pagamento_confirmado: pedido.status_pagamento === 'PAGO'
     };
     
-    // 🎯 DEBUG: Log do formData que será definido
-    console.log('🎯 DEBUG - formDataToSet.data_pagamento_previsto:', formDataToSet.data_pagamento_previsto);
     
     setFormData(formDataToSet);
     
@@ -966,12 +871,6 @@ const Pedidos: React.FC = () => {
         <div className="flex items-center gap-4">
           <RefreshButton refreshType="pedidos" />
           <button
-            onClick={testarEdicaoFrancieli}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-          >
-            🧪 Testar Edição Francieli
-          </button>
-          <button
             onClick={() => {
               resetForm();
               setShowModal(true);
@@ -1278,7 +1177,6 @@ const Pedidos: React.FC = () => {
                     <select
                       value={editingPedido ? (contratoData?.contrato?.id || '') : (contratoData?.contrato?.id || '')}
                       onChange={(e) => {
-                        console.log('🎯 Select onChange - valor selecionado:', e.target.value);
                         handleContratoChange(Number(e.target.value));
                       }}
                       required

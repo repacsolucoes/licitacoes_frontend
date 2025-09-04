@@ -390,7 +390,6 @@ export const documentacaoService = {
     if (clienteId) params.cliente_id = clienteId;
     
     try {
-      console.log('Iniciando download de habilitação...');
       
       // Usar timeout maior para downloads de arquivos grandes
       const response = await api.get('/documentacoes/download-habilitacao', {
@@ -399,9 +398,6 @@ export const documentacaoService = {
         timeout: 30000, // 30 segundos para downloads
       });
       
-      console.log('Resposta recebida:', response);
-      console.log('Tipo da resposta:', typeof response.data);
-      console.log('Tamanho da resposta:', response.data?.size || 'N/A');
       
       // Verificar se a resposta é válida
       if (!response.data || response.data.size === 0) {
@@ -413,12 +409,9 @@ export const documentacaoService = {
         type: 'application/zip' 
       });
       
-      console.log('Blob criado:', blob);
-      console.log('Tamanho do Blob:', blob.size);
       
       // Criar URL para o Blob
       const url = window.URL.createObjectURL(blob);
-      console.log('URL criada:', url);
       
       // Criar elemento de link para download
       const link = document.createElement('a');
@@ -434,7 +427,6 @@ export const documentacaoService = {
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        console.log('Download concluído e recursos limpos');
       }, 100);
       
     } catch (error: any) {
@@ -472,7 +464,6 @@ export const relatorioService = {
 // FORÇAR ATUALIZAÇÃO - getRelatorioPorStatusPedidos
 export const pedidoService = {
   list: async (): Promise<Pedido[]> => {
-    console.log('🎯 DEBUG - Fazendo requisição para /pedidos/');
     // Forçar requisição sem cache
     const response = await api.get('/pedidos/', {
       headers: {
@@ -480,15 +471,10 @@ export const pedidoService = {
         'Pragma': 'no-cache'
       }
     });
-    console.log('🎯 DEBUG - Resposta da API pedidos:', response.data);
     
     // Verificar se data_pagamento_previsto está presente
     const pedido43 = response.data.find((p: any) => p.id === 43);
     if (pedido43) {
-      console.log('🎯 DEBUG - Pedido 43 da resposta:', pedido43);
-      console.log('🎯 DEBUG - data_pagamento_previsto presente?', 'data_pagamento_previsto' in pedido43);
-      console.log('🎯 DEBUG - data_pagamento_previsto valor:', pedido43.data_pagamento_previsto);
-      console.log('🎯 DEBUG - TODOS os campos do pedido 43:', Object.keys(pedido43));
     }
     
     return response.data;
