@@ -720,6 +720,12 @@ const Pedidos: React.FC = () => {
         const quantidade = Number(value);
         newItems[itemIndex].custo_total = (newItems[itemIndex].custo_unitario || 0) * quantidade;
         newItems[itemIndex].preco_total = (newItems[itemIndex].preco_unitario || 0) * quantidade;
+      } else if (field === 'custo_unitario') {
+        const quantidade = Number(newItems[itemIndex].quantidade) || 0;
+        newItems[itemIndex].custo_total = Number(value) * quantidade;
+      } else if (field === 'preco_unitario') {
+        const quantidade = Number(newItems[itemIndex].quantidade) || 0;
+        newItems[itemIndex].preco_total = Number(value) * quantidade;
       }
       
       setPedidoItems(newItems);
@@ -1332,7 +1338,15 @@ const Pedidos: React.FC = () => {
                               </div>
                               <div className="w-24">
                                 <span className="font-medium">Custo Unit.:</span>
-                                <div className="text-gray-700 text-sm">R$ {item.custo_unitario?.toFixed(2) || '0,00'}</div>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={item.custo_unitario || ''}
+                                  onChange={(e) => handleItemChange(item.item_id, 'custo_unitario', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  placeholder="0,00"
+                                />
                               </div>
                               <div className="w-24">
                                 <span className="font-medium">Preço Unit.:</span>
