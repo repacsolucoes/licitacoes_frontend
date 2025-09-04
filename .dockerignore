@@ -1,102 +1,60 @@
 # Dependencies
-node_modules/
+node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
 # Build outputs
-dist/
-build/
-out/
-.next/
-.nuxt/
-.cache/
-.parcel-cache/
+dist
+build
+.next
+out
 
 # Environment files
-.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# IDE
-.vscode/
-.idea/
+# IDE files
+.vscode
+.idea
 *.swp
 *.swo
-*~
 
-# OS
+# OS files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Testing
-coverage/
-.nyc_output/
-.pytest_cache/
-
-# Temporary files
-*.tmp
-*.temp
-temp/
-tmp/
-
 # Git
-.git/
+.git
 .gitignore
-README.md
-
-# Documentation
-docs/
-*.md
 
 # Docker
 Dockerfile
-docker-compose.yml
 .dockerignore
 
-# Development files
-.env.example
-.eslintrc*
-.prettierrc*
-tsconfig.json
-postcss.config.js
-tailwind.config.js
+# Logs
+logs
+*.log
 
-# TypeScript
-*.tsbuildinfo
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
 
 # Optional npm cache directory
 .npm
-
-# Optional eslint cache
-.eslintcache
-
-# Optional stylelint cache
-.stylelintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
 
 # Optional REPL history
 .node_repl_history
@@ -107,31 +65,27 @@ tailwind.config.js
 # Yarn Integrity file
 .yarn-integrity
 
-# yarn v2
-.yarn/cache
-.yarn/unplugged
-.yarn/build-state.yml
-.yarn/install-state.gz
-.pnp.*
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
 
-# Storybook
-.storybook/
-storybook-static/
+# next.js build output
+.next
 
-# Cypress
-cypress/
-cypress.json
-cypress.config.*
+# nuxt.js build output
+.nuxt
 
-# Playwright
-test-results/
-playwright-report/
-playwright/.cache/
+# vuepress build output
+.vuepress/dist
 
-# Jest
-coverage/
-.nyc_output/
+# Serverless directories
+.serverless
 
-# Vite
-dist-ssr/
-*.local
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port

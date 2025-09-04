@@ -5,23 +5,30 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: licitacoes_frontend
-    environment:
-      - VITE_API_URL=http://localhost:8100
-      - VITE_APP_NAME=Sistema de Gerenciamento para Licitações
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      target: runner
     ports:
       - "3100:80"
-    networks:
-      - frontend_network
+    environment:
+      - NODE_ENV=production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    restart: unless-stopped
+      start_period: 40s
+
+  # Uncomment if you have a backend service
+  # backend:
+  #   image: your-backend-image:latest
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - DATABASE_URL=your-database-url
+  #   restart: unless-stopped
 
 networks:
-  frontend_network:
-    driver: bridge
+  default:
+    name: licitacoes-network
