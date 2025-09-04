@@ -9,8 +9,8 @@ import {
   XCircle,
   AlertTriangle
 } from 'lucide-react';
-import { pedidoService, licitacaoService, clienteService, contratoService } from '../services/api';
-import { Pedido, PedidoCreate, PedidoUpdate, Licitacao, Cliente, User } from '../types';
+import { pedidoService, clienteService, contratoService } from '../services/api';
+import { Pedido, PedidoCreate, Licitacao, Cliente, User } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { RefreshButton } from '../components/RefreshButton';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
@@ -20,6 +20,7 @@ import { useCustomAlert } from '../hooks/useCustomAlert';
 interface PedidoWithDetails extends Pedido {
   licitacao: Licitacao;
   user_criador: User;
+  data_pagamento_previsto?: string;
 }
 
 const Pedidos: React.FC = () => {
@@ -161,6 +162,23 @@ const Pedidos: React.FC = () => {
       // Carregar pedidos
       try {
         const pedidosData = await pedidoService.list();
+        console.log('🎯 TODOS OS PEDIDOS CARREGADOS:', pedidosData);
+        
+        // 🎯 DEBUG: Verificar se data_pagamento_previsto está presente
+        const pedido43 = pedidosData.find((p: any) => p.id === 43);
+        if (pedido43) {
+          console.log('🎯 DEBUG - Pedido 43 da API:', pedido43);
+          console.log('🎯 DEBUG - data_pagamento_previsto:', pedido43.data_pagamento_previsto);
+        }
+        
+        // 🎯 TESTE: Filtrar pedidos da Francieli Cristina
+        const pedidosFrancieli = pedidosData.filter((pedido: any) => {
+          return pedido.user_criador?.full_name?.includes('FRANCIELI') || 
+                 pedido.user_criador?.full_name?.includes('Francieli') ||
+                 pedido.user_criador?.email?.includes('francieli');
+        });
+        console.log('🎯 PEDIDOS DA FRANCIELI:', pedidosFrancieli);
+        
         setPedidos(pedidosData as PedidoWithDetails[]);
       } catch (error: any) {
         setPedidos([]);
@@ -195,9 +213,12 @@ const Pedidos: React.FC = () => {
       }
       
       try {
+        console.log('🎯 Carregando contratos na função carregarDados...');
         const contratosData = await contratoService.listarContratos();
+        console.log('🎯 Contratos carregados:', contratosData);
         setContratos(contratosData);
       } catch (error: any) {
+        console.error('🎯 Erro ao carregar contratos:', error);
         setContratos([]);
       }
 
@@ -222,6 +243,18 @@ const Pedidos: React.FC = () => {
       // 🎯 NOVO: Preparar dados completos incluindo itens
       const dadosCompletos = {
         ...formData,
+        // 🎯 CORRIGIDO: Mapear campos do frontend para o backend
+        entrega_feita: formData.entrega_confirmada || false,
+        entrega_data: formData.data_entrega || undefined,
+        // 🎯 NOVO: Garantir que campos de pagamento sejam enviados
+        status_pagamento: formData.status_pagamento,
+        valor_pago: formData.valor_pago || 0,
+        data_pagamento: formData.data_pagamento || null,
+        data_pagamento_previsto: formData.data_pagamento_previsto || null,
+        observacoes_pagamento: formData.observacoes_pagamento || '',
+        // 🎯 NOVO: Garantir que campos da Nota Fiscal sejam enviados
+        numero_nota_fiscal: formData.numero_nota_fiscal || '',
+        valor_nota_fiscal: formData.valor_nota_fiscal || 0,
         // Incluir dados dos itens se existirem
         itens: pedidoItems.length > 0 ? pedidoItems : undefined,
         // Incluir dados do contrato se existir
@@ -239,10 +272,21 @@ const Pedidos: React.FC = () => {
         }, 0)
       };
       
+      // 🎯 DEBUG: Log dos dados que serão enviados
+      console.log('🔍 Dados completos para envio:', dadosCompletos);
+      console.log('🔍 Campos de pagamento:', {
+        status_pagamento: dadosCompletos.status_pagamento,
+        valor_pago: dadosCompletos.valor_pago,
+        data_pagamento: dadosCompletos.data_pagamento,
+        observacoes_pagamento: dadosCompletos.observacoes_pagamento
+      });
+
       if (editingPedido) {
-        await pedidoService.update(editingPedido.id, dadosCompletos as PedidoUpdate);
+        console.log('🔍 Atualizando pedido:', editingPedido.id);
+        await pedidoService.update(editingPedido.id, dadosCompletos as any);
       } else {
-        await pedidoService.create(dadosCompletos);
+        console.log('🔍 Criando novo pedido');
+        await pedidoService.create(dadosCompletos as any);
       }
       
       setShowModal(false);
@@ -268,96 +312,136 @@ const Pedidos: React.FC = () => {
     }
   };
 
+  // 🎯 TESTE: Função para testar edição de pedido da Francieli
+  const testarEdicaoFrancieli = async () => {
+    try {
+      const pedidosData = await pedidoService.list();
+      console.log('🎯 TESTE: Todos os pedidos carregados:', pedidosData);
+      
+      const pedidosFrancieli = pedidosData.filter((pedido: any) => {
+        return pedido.user_criador?.full_name?.includes('FRANCIELI') || 
+               pedido.user_criador?.full_name?.includes('Francieli') ||
+               pedido.user_criador?.email?.includes('francieli');
+      });
+      
+      console.log('🎯 TESTE: Pedidos da Francieli filtrados:', pedidosFrancieli);
+      
+      if (pedidosFrancieli.length > 0) {
+        const pedidoTeste = pedidosFrancieli[0];
+        console.log('🎯 TESTE: Pedido específico para teste:', pedidoTeste);
+        console.log('🎯 TESTE: Licitação ID do pedido:', pedidoTeste.licitacao_id);
+        console.log('🎯 TESTE: Tipo do licitacao_id:', typeof pedidoTeste.licitacao_id);
+        
+        await handleEdit(pedidoTeste as PedidoWithDetails);
+      } else {
+        console.log('🎯 TESTE: Nenhum pedido da Francieli encontrado');
+      }
+    } catch (error) {
+      console.error('🎯 TESTE: Erro ao testar edição:', error);
+    }
+  };
+
   const handleEdit = async (pedido: PedidoWithDetails) => {
+    console.log('🎯 INÍCIO handleEdit - pedido:', pedido);
+    console.log('🎯 pedido.licitacao_id:', pedido.licitacao_id);
+    console.log('🎯 pedido.user_criador:', pedido.user_criador);
     setEditingPedido(pedido);
     
-    // Carregar dados da licitação
+    // 🎯 CORRIGIDO: Carregar dados do contrato para esta licitação
     try {
-      await licitacaoService.get(pedido.licitacao_id);
+      // Primeiro, garantir que temos os contratos carregados
+      let contratosAtivos = contratos;
+      if (contratosAtivos.length === 0) {
+        console.log('🎯 Contratos não carregados, buscando...');
+        contratosAtivos = await contratoService.listarContratos();
+        setContratos(contratosAtivos);
+      }
+      console.log('🎯 Contratos ativos encontrados:', contratosAtivos);
+      const contratoAtivo = contratosAtivos.find((c: any) => {
+        const contratoLicitacaoId = Number(c.licitacao.id);
+        const pedidoLicitacaoId = Number(pedido.licitacao_id);
+        console.log('🎯 Comparando:', contratoLicitacaoId, '===', pedidoLicitacaoId, '?', contratoLicitacaoId === pedidoLicitacaoId);
+        console.log('🎯 Tipos:', typeof contratoLicitacaoId, typeof pedidoLicitacaoId);
+        console.log('🎯 Contrato completo:', c);
+        return contratoLicitacaoId === pedidoLicitacaoId;
+      });
+      console.log('🎯 Contrato ativo encontrado:', contratoAtivo);
       
-      // 🎯 NOVO: Buscar dados do contrato para esta licitação
-      try {
-        // 🎯 CORRIGIDO: Usar o mesmo endpoint que a criação usa para garantir dados consistentes
-        // Primeiro, encontrar o contrato ativo para esta licitação
-        const contratosAtivos = await contratoService.listarContratos();
-        const contratoAtivo = contratosAtivos.find((c: any) => c.licitacao.id === pedido.licitacao_id);
+      if (contratoAtivo) {
+        console.log('🎯 Contrato encontrado para edição:', contratoAtivo);
         
-        if (contratoAtivo) {
-          // Usar o mesmo endpoint que a criação usa
-          const contratoData = await contratoService.obterItensParaPedido(contratoAtivo.id);
-          
-          if (contratoData && contratoData.total_itens_disponiveis > 0) {
-            // 🎯 NOVO: Mapear dados do contrato para o formato esperado
-            const contratoDataMapeado = {
-              contrato_existe: true,
-              contrato: contratoData.contrato,
-              licitacao: {
-                id: contratoData.licitacao_id,
-                numero: contratoData.licitacao_numero,
-                tipo_classificacao: contratoData.tipo_classificacao
-              },
-              itens: contratoData.itens || [],
-              itens_licitacao: contratoData.itens_licitacao || [],
-              grupos_licitacao: contratoData.grupos_licitacao || []
+        // Usar o mesmo endpoint que a criação usa
+        const contratoData = await contratoService.obterItensParaPedido(contratoAtivo.id);
+        console.log('🎯 Dados do contrato obtidos:', contratoData);
+        
+        // 🎯 CORRIGIDO: Sempre mapear dados do contrato, mesmo se não houver itens disponíveis
+        const contratoDataMapeado = {
+          contrato_existe: true,
+          contrato: contratoData.contrato,
+          licitacao: {
+            id: contratoData.licitacao_id,
+            numero: contratoData.licitacao_numero,
+            tipo_classificacao: contratoData.tipo_classificacao
+          },
+          itens: contratoData.itens || [],
+          itens_licitacao: contratoData.itens_licitacao || [],
+          grupos_licitacao: contratoData.grupos_licitacao || []
+        };
+        
+        setContratoData(contratoDataMapeado);
+        console.log('🎯 ContratoData definido:', contratoDataMapeado);
+        console.log('🎯 Contrato ID para o select:', contratoDataMapeado.contrato?.id);
+        
+        // 🎯 CORRIGIDO: Para edição, carregar os itens que já existem no pedido
+        if (pedido.itens_pedido && pedido.itens_pedido.length > 0) {
+          const itensExistentes = pedido.itens_pedido.map((itemPedido: any) => {
+            return {
+              item_id: itemPedido.item_licitacao_id,
+              quantidade: itemPedido.quantidade_solicitada || 0,
+              max_quantidade: itemPedido.quantidade_solicitada || 0,
+              preco_unitario: itemPedido.preco_unitario || 0,
+              preco_total: itemPedido.preco_total || 0,
+              custo_unitario: itemPedido.custo_unitario || 0,
+              custo_total: itemPedido.custo_total || 0,
+              item_licitacao: itemPedido.item_licitacao
             };
-            
-            setContratoData(contratoDataMapeado);
-            
-            // 🎯 CORRIGIDO: Para edição, carregar os itens que já existem no pedido
-            // 🎯 NOVO: Carregar itens existentes do pedido
-            if (pedido.itens_pedido && pedido.itens_pedido.length > 0) {
-              const itensExistentes = pedido.itens_pedido.map((itemPedido: any) => {
-                // 🎯 NOVO: Usar os dados que já vêm do backend (incluindo descrição)
-                return {
-                  item_id: itemPedido.item_licitacao_id,
-                  quantidade: itemPedido.quantidade_solicitada || 0,
-                  max_quantidade: itemPedido.quantidade_solicitada || 0, // Usar quantidade atual como máximo
-                  preco_unitario: itemPedido.preco_unitario || 0,
-                  preco_total: itemPedido.preco_total || 0,
-                  custo_unitario: itemPedido.custo_unitario || 0,
-                  custo_total: itemPedido.custo_total || 0,
-                  // 🎯 NOVO: Incluir dados do item_licitacao que vêm do backend
-                  item_licitacao: itemPedido.item_licitacao
-                };
-              });
-              
-              setPedidoItems(itensExistentes);
-            } else {
-              setPedidoItems([]);
-            }
-              
-              // Atualizar itens disponíveis baseados no contrato
-              setAvailableItems(contratoData.itens.map((item: any) => ({
-                id: item.id,
-                descricao: item.descricao || `Item ${item.id}`,
-                quantidade_disponivel: item.quantidade || 0
-              })));
-            } else {
-              // Carregar itens disponíveis da licitação como fallback
-              const items = await licitacaoService.listItens(pedido.licitacao_id);
-              setAvailableItems(items.map(item => ({
-                id: item.id,
-                descricao: item.descricao,
-                quantidade_disponivel: item.quantidade
-              })));
-            }
-          } else {
-            setContratoData(null);
-            setAvailableItems([]);
-            setPedidoItems([]);
-          }
-        } catch (error) {
-          // Fallback para itens da licitação
-          const items = await licitacaoService.listItens(pedido.licitacao_id);
-          setAvailableItems(items.map(item => ({
-            id: item.id,
-            descricao: item.descricao,
-            quantidade_disponivel: item.quantidade
-          })));
+          });
+          
+          setPedidoItems(itensExistentes);
+          console.log('🎯 Itens do pedido carregados:', itensExistentes);
+        } else {
+          setPedidoItems([]);
+          console.log('🎯 Nenhum item no pedido para carregar');
         }
+          
+        // Atualizar itens disponíveis baseados no contrato
+        setAvailableItems((contratoData.itens || []).map((item: any) => ({
+          id: item.id,
+          descricao: item.descricao || `Item ${item.id}`,
+          quantidade_disponivel: item.quantidade || 0
+        })));
+      } else {
+        console.log('🎯 Nenhum contrato ativo encontrado para esta licitação');
+        setContratoData(null);
+        setAvailableItems([]);
+        setPedidoItems([]);
+      }
     } catch (error) {
-      // Erro ao carregar dados da licitação
+      console.error('🎯 Erro ao carregar dados do contrato:', error);
+      setContratoData(null);
+      setAvailableItems([]);
+      setPedidoItems([]);
     }
+    
+    // 🎯 NOVO: Calcular valor total do pedido baseado nos itens
+    const valorTotalPedido = pedido.itens_pedido ? pedido.itens_pedido.reduce((total: number, item: any) => {
+      return total + (item.preco_total || 0);
+    }, 0) : 0;
+
+    // 🎯 DEBUG: Log da data prevista
+    console.log('🎯 DEBUG - Data prevista do pedido:', pedido.data_pagamento_previsto);
+    console.log('🎯 DEBUG - Tipo da data:', typeof pedido.data_pagamento_previsto);
+    console.log('🎯 DEBUG - Pedido completo:', pedido);
     
     const formDataToSet = {
       licitacao_id: pedido.licitacao_id,
@@ -378,15 +462,23 @@ const Pedidos: React.FC = () => {
       entrega_data: pedido.entrega_data,
       entrega_observacoes: pedido.entrega_observacoes,
       entrega_confirmada: pedido.entrega_feita || false,
+      data_entrega: pedido.entrega_data || '', // 🎯 CORRIGIDO: Mapear para o campo correto do formulário
       observacoes_entrega: pedido.entrega_observacoes || '',
       status_geral: pedido.status_geral,
       status_pagamento: pedido.status_pagamento,
-      data_pagamento_previsto: '',
+      data_pagamento_previsto: pedido.data_pagamento_previsto || '',
       valor_pago: pedido.valor_pago,
       data_pagamento: pedido.data_pagamento,
       observacoes_pagamento: pedido.observacoes_pagamento,
-      observacoes_gerais: pedido.observacoes_gerais
+      observacoes_gerais: pedido.observacoes_gerais,
+      // 🎯 NOVO: Preencher automaticamente valor da nota fiscal com valor total do pedido
+      valor_nota_fiscal: pedido.valor_nota_fiscal || valorTotalPedido,
+      numero_nota_fiscal: pedido.numero_nota_fiscal || '',
+      pagamento_confirmado: pedido.status_pagamento === 'PAGO'
     };
+    
+    // 🎯 DEBUG: Log do formData que será definido
+    console.log('🎯 DEBUG - formDataToSet.data_pagamento_previsto:', formDataToSet.data_pagamento_previsto);
     
     setFormData(formDataToSet);
     
@@ -874,6 +966,12 @@ const Pedidos: React.FC = () => {
         <div className="flex items-center gap-4">
           <RefreshButton refreshType="pedidos" />
           <button
+            onClick={testarEdicaoFrancieli}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+          >
+            🧪 Testar Edição Francieli
+          </button>
+          <button
             onClick={() => {
               resetForm();
               setShowModal(true);
@@ -1006,30 +1104,42 @@ const Pedidos: React.FC = () => {
               {/* Indicadores de Progresso */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Empenho</span>
+                  <span className="text-gray-600">Pedido/Empenho</span>
                   <div className="flex items-center gap-2">
-                    {pedido.empenho_feito ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-500" />
-                    )}
-                    <span className={pedido.empenho_feito ? 'text-green-600' : 'text-red-600'}>
-                      {pedido.empenho_feito ? 'Concluído' : 'Pendente'}
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-600">Pedido</span>
-                  <div className="flex items-center gap-2">
-                    {pedido.pedido_orgao_feito ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-500" />
-                    )}
-                    <span className={pedido.pedido_orgao_feito ? 'text-green-600' : 'text-red-600'}>
-                      {pedido.pedido_orgao_feito ? 'Concluído' : 'Pendente'}
-                    </span>
+                    {(() => {
+                      const status = pedido.status_geral;
+                      switch (status) {
+                        case 'CONCLUIDO':
+                          return (
+                            <>
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                              <span className="text-green-600">Concluído</span>
+                            </>
+                          );
+                        case 'EM_ANDAMENTO':
+                          return (
+                            <>
+                              <Clock className="h-4 w-4 text-blue-500" />
+                              <span className="text-blue-600">Em Andamento</span>
+                            </>
+                          );
+                        case 'CANCELADO':
+                          return (
+                            <>
+                              <XCircle className="h-4 w-4 text-red-500" />
+                              <span className="text-red-600">Cancelado</span>
+                            </>
+                          );
+                        case 'PENDENTE':
+                        default:
+                          return (
+                            <>
+                              <XCircle className="h-4 w-4 text-yellow-500" />
+                              <span className="text-yellow-600">Pendente</span>
+                            </>
+                          );
+                      }
+                    })()}
                   </div>
                 </div>
 
@@ -1044,6 +1154,53 @@ const Pedidos: React.FC = () => {
                     <span className={pedido.contrato_feito ? 'text-green-600' : 'text-red-600'}>
                       {pedido.contrato_feito ? 'Concluído' : 'Pendente'}
                     </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Entrega</span>
+                  <div className="flex items-center gap-2">
+                    {pedido.entrega_feita ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-500" />
+                    )}
+                    <span className={pedido.entrega_feita ? 'text-green-600' : 'text-red-600'}>
+                      {pedido.entrega_feita ? 'Concluído' : 'Pendente'}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Pagamento</span>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const statusPagamento = pedido.status_pagamento;
+                      
+                      if (statusPagamento === 'PAGO') {
+                        return (
+                          <>
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                            <span className="text-green-600">Concluído</span>
+                          </>
+                        );
+                      } else if (statusPagamento === 'PARCIAL') {
+                        return (
+                          <>
+                            <Clock className="h-4 w-4 text-yellow-500" />
+                            <span className="text-yellow-600">Parcial</span>
+                          </>
+                        );
+                      } else {
+                        // PENDENTE ou qualquer outro status
+                        return (
+                          <>
+                            <XCircle className="h-4 w-4 text-red-500" />
+                            <span className="text-red-600">Pendente</span>
+                          </>
+                        );
+                      }
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1110,9 +1267,20 @@ const Pedidos: React.FC = () => {
                     <label className="block text-sm font-medium text-blue-700 mb-2">
                       Contrato *
                     </label>
+                    {/* Debug: Mostrar valor atual do select */}
+                    {editingPedido && (
+                      <div className="text-xs text-gray-500 mb-1">
+                        Debug: contratoData?.contrato?.id = {contratoData?.contrato?.id || 'undefined'}<br/>
+                        Debug: contratos.length = {contratos.length}<br/>
+                        Debug: pedido.licitacao_id = {editingPedido.licitacao_id}
+                      </div>
+                    )}
                     <select
-                      value={contratoData?.contrato?.id || ''}
-                      onChange={(e) => handleContratoChange(Number(e.target.value))}
+                      value={editingPedido ? (contratoData?.contrato?.id || '') : (contratoData?.contrato?.id || '')}
+                      onChange={(e) => {
+                        console.log('🎯 Select onChange - valor selecionado:', e.target.value);
+                        handleContratoChange(Number(e.target.value));
+                      }}
                       required
                       disabled={!!editingPedido}
                       className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
@@ -1418,7 +1586,27 @@ const Pedidos: React.FC = () => {
                         type="checkbox"
                         id="pagamento_confirmado"
                         checked={formData.pagamento_confirmado || false}
-                        onChange={(e) => setFormData({...formData, pagamento_confirmado: e.target.checked})}
+                        onChange={(e) => {
+                          const isChecked = e.target.checked;
+                          // 🎯 NOVO: Preencher automaticamente o valor pago quando marcar o checkbox
+                          const valorTotalPedido = pedidoItems.reduce((total, item) => {
+                            if (item.quantidade && Number(item.quantidade) > 0) {
+                              return total + (item.preco_total || 0);
+                            }
+                            return total;
+                          }, 0);
+                          
+                          setFormData({
+                            ...formData, 
+                            pagamento_confirmado: isChecked,
+                            // 🎯 NOVO: Atualizar status_pagamento baseado no checkbox
+                            status_pagamento: isChecked ? 'PAGO' : 'PENDENTE',
+                            // 🎯 NOVO: Se marcar como confirmado, preencher valor pago; se desmarcar, limpar
+                            valor_pago: isChecked ? (formData.valor_pago || valorTotalPedido) : 0,
+                            // 🎯 NOVO: Se marcar como confirmado, preencher data atual; se desmarcar, limpar
+                            data_pagamento: isChecked ? (formData.data_pagamento || new Date().toISOString().split('T')[0]) : undefined
+                          });
+                        }}
                         className="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded"
                       />
                       <label htmlFor="pagamento_confirmado" className="text-sm text-gray-700">
@@ -1449,8 +1637,7 @@ const Pedidos: React.FC = () => {
                       type="date"
                       value={formData.data_pagamento || ''}
                       onChange={(e) => setFormData({...formData, data_pagamento: e.target.value})}
-                      disabled={!formData.pagamento_confirmado}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                     />
                   </div>
 
@@ -1465,9 +1652,8 @@ const Pedidos: React.FC = () => {
                       min="0"
                       value={formData.valor_pago || ''}
                       onChange={(e) => setFormData({...formData, valor_pago: e.target.value === '' ? 0 : parseFloat(e.target.value)})}
-                      disabled={!formData.pagamento_confirmado}
                       placeholder="0,00"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                     />
                   </div>
 
@@ -1480,9 +1666,8 @@ const Pedidos: React.FC = () => {
                       type="text"
                       value={formData.numero_nota_fiscal || ''}
                       onChange={(e) => setFormData({...formData, numero_nota_fiscal: e.target.value})}
-                      disabled={!formData.pagamento_confirmado}
                       placeholder="Número da NF"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                     />
                   </div>
 
@@ -1497,9 +1682,8 @@ const Pedidos: React.FC = () => {
                       min="0"
                       value={formData.valor_nota_fiscal || ''}
                       onChange={(e) => setFormData({...formData, valor_nota_fiscal: e.target.value === '' ? 0 : parseFloat(e.target.value)})}
-                      disabled={!formData.pagamento_confirmado}
                       placeholder="0,00"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                     />
                   </div>
                 </div>

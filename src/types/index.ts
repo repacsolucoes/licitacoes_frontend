@@ -190,6 +190,7 @@ export interface Pedido {
   status_pagamento: string;
   valor_pago: number;
   data_pagamento?: string;
+  data_pagamento_previsto?: string;
   observacoes_pagamento?: string;
   observacoes_gerais?: string;
   created_at: string;

@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { contratoService, licitacaoService } from '../services/api';
-import { Contrato, ContratoCreate, ContratoUpdate, Licitacao, LicitacaoComItens, ItemLicitacao } from '../types';
-import { Plus, Edit, Trash2, Eye, Search, Filter, FileText } from 'lucide-react';
+import { Contrato, ContratoCreate, ContratoUpdate, Licitacao } from '../types';
+import { Plus, Edit, Trash2, Search, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import CustomAlert from '../components/CustomAlert';
 import { useCustomAlert } from '../hooks/useCustomAlert';
 import toast from 'react-hot-toast'; // 🎯 NOVO: Import para notificações
 
 const Contratos: React.FC = () => {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { alertState, hideAlert, confirm } = useCustomAlert();
   const [showModal, setShowModal] = useState(false);
@@ -40,10 +40,10 @@ const Contratos: React.FC = () => {
     }
   );
 
-  // Buscar licitações para seleção
+  // Buscar licitações para seleção - APENAS COM STATUS GANHO
   const { data: licitacoes = [] } = useQuery(
-    'licitacoes',
-    () => licitacaoService.list(),
+    'licitacoes-ganhas',
+    () => licitacaoService.list({ status_filter: 'GANHO' }),
     {
       enabled: !!user,
       refetchOnWindowFocus: false,
@@ -70,7 +70,7 @@ const Contratos: React.FC = () => {
       resetForm();
       toast.success('Contrato criado com sucesso!');
     },
-    onError: (error: any) => {
+    onError: () => {
       toast.error('Erro ao criar contrato. Tente novamente.');
     },
     onSettled: () => {
@@ -90,7 +90,7 @@ const Contratos: React.FC = () => {
         resetForm();
         toast.success('Contrato atualizado com sucesso!');
       },
-      onError: (error: any) => {
+      onError: () => {
         toast.error('Erro ao atualizar contrato. Tente novamente.');
       },
       onSettled: () => {
@@ -106,7 +106,7 @@ const Contratos: React.FC = () => {
       queryClient.invalidateQueries('contratosStats');
       toast.success('Contrato deletado com sucesso!');
     },
-    onError: (error: any) => {
+    onError: () => {
       toast.error('Erro ao deletar contrato. Tente novamente.');
     },
     onSettled: () => {
@@ -126,7 +126,7 @@ const Contratos: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
-  // Filtrar licitações que não têm contrato
+  // Filtrar licitações que não têm contrato (já filtradas por status GANHO)
   const licitacoesDisponiveis = licitacoes.filter(licitacao => {
     return !contratos.some(contrato => contrato.licitacao_id === licitacao.id);
   });
@@ -373,11 +373,6 @@ const Contratos: React.FC = () => {
     };
   }, [showModal, showItemModal, handleCloseModal]); // 🎯 REMOVIDO: alertState.isOpen da dependência
 
-  const handleDelete = (id: number) => {
-    if (window.confirm('Tem certeza que deseja deletar este contrato?')) {
-      deleteMutation.mutate(id);
-    }
-  };
 
   if (isLoading) return <div className="flex justify-center items-center h-64">Carregando...</div>;
   if (error) return <div className="text-red-600">Erro ao carregar contratos</div>;
@@ -568,6 +563,11 @@ const Contratos: React.FC = () => {
                       <FileText className="h-5 w-5 mr-2" />
                       Selecionar Licitação
                     </h4>
+                    <div className="mb-3 p-2 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm text-green-700">
+                        <strong>📋 Filtro ativo:</strong> Apenas licitações com status <span className="font-semibold text-green-800">GANHO</span> são exibidas para criação de contratos.
+                      </p>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-blue-700 mb-2">

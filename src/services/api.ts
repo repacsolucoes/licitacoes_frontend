@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { LoginCredentials, AuthResponse, User, Cliente, Licitacao, DashboardStats, Documentacao, Pedido, PedidoCreate, PedidoUpdate, PedidoStats, ItemLicitacao, LicitacaoComItensCreate, LicitacaoComItens, Contrato, ContratoCreate, ContratoUpdate, ContratoStats } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://3.84.211.83:8100/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8100/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -284,46 +284,6 @@ export const licitacaoService = {
   },
 };
 
-// Serviço de Pedidos (Legado - será removido)
-export const pedidoServiceLegacy = {
-  list: async (statusGeral?: string, clienteId?: number): Promise<Pedido[]> => {
-    const params: any = {};
-    if (statusGeral) params.status_geral = statusGeral;
-    if (clienteId) params.cliente_id = clienteId;
-    
-    const response = await api.get('/pedidos/', { params });
-    return response.data;
-  },
-
-  get: async (id: number): Promise<Pedido> => {
-    const response = await api.get(`/pedidos/${id}/`);
-    return response.data;
-  },
-
-  create: async (pedido: PedidoCreate): Promise<Pedido> => {
-    const response = await api.post('/pedidos/', pedido);
-    return response.data;
-  },
-
-  update: async (id: number, pedido: PedidoUpdate): Promise<Pedido> => {
-    const response = await api.put(`/pedidos/${id}/`, pedido);
-    return response.data;
-  },
-
-  delete: async (id: number): Promise<void> => {
-    await api.delete(`/pedidos/${id}/`);
-  },
-
-  getByLicitacao: async (licitacaoId: number): Promise<Pedido | null> => {
-    const response = await api.get(`/pedidos/licitacao/${licitacaoId}`);
-    return response.data;
-  },
-
-  getStats: async (): Promise<PedidoStats> => {
-    const response = await api.get('/pedidos/dashboard/stats');
-    return response.data;
-  },
-};
 
 export const documentacaoService = {
   list: async (clienteId?: number, status?: string, tipoDocumento?: string): Promise<Documentacao[]> => {
@@ -500,10 +460,37 @@ export const documentacaoService = {
   },
 };
 
+// Serviço de Relatórios Financeiros
+export const relatorioService = {
+  financeiro: async (): Promise<any> => {
+    const response = await api.get('/pedidos/relatorio-financeiro');
+    return response.data;
+  },
+};
+
 // Serviço de Pedidos
+// FORÇAR ATUALIZAÇÃO - getRelatorioPorStatusPedidos
 export const pedidoService = {
   list: async (): Promise<Pedido[]> => {
-    const response = await api.get('/pedidos/');
+    console.log('🎯 DEBUG - Fazendo requisição para /pedidos/');
+    // Forçar requisição sem cache
+    const response = await api.get('/pedidos/', {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    });
+    console.log('🎯 DEBUG - Resposta da API pedidos:', response.data);
+    
+    // Verificar se data_pagamento_previsto está presente
+    const pedido43 = response.data.find((p: any) => p.id === 43);
+    if (pedido43) {
+      console.log('🎯 DEBUG - Pedido 43 da resposta:', pedido43);
+      console.log('🎯 DEBUG - data_pagamento_previsto presente?', 'data_pagamento_previsto' in pedido43);
+      console.log('🎯 DEBUG - data_pagamento_previsto valor:', pedido43.data_pagamento_previsto);
+      console.log('🎯 DEBUG - TODOS os campos do pedido 43:', Object.keys(pedido43));
+    }
+    
     return response.data;
   },
 
@@ -539,6 +526,12 @@ export const pedidoService = {
   // 🎯 NOVO: Buscar itens de um pedido específico
   getItens: async (pedidoId: number): Promise<any[]> => {
     const response = await api.get(`/pedidos/${pedidoId}/itens/`);
+    return response.data;
+  },
+
+  getRelatorioPorStatusPedidos: async (clienteId?: number): Promise<any[]> => {
+    const params = clienteId ? { cliente_id: clienteId } : {};
+    const response = await api.get('/pedidos/relatorios/por-status', { params });
     return response.data;
   },
 };
