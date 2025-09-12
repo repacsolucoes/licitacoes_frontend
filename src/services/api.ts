@@ -80,8 +80,17 @@ export const authService = {
 
 // Serviços de usuários
 export const userService = {
-  list: async (): Promise<User[]> => {
-    const response = await api.get('/usuarios/');
+  list: async (filters?: { 
+    page?: number,
+    limit?: number,
+    search?: string
+  }): Promise<{ data: User[], total: number, page: number, limit: number, total_pages: number }> => {
+    const params: any = {};
+    if (filters?.page) params.page = filters.page;
+    if (filters?.limit) params.limit = filters.limit;
+    if (filters?.search) params.search = filters.search;
+    
+    const response = await api.get('/usuarios/', { params });
     return response.data;
   },
 
@@ -107,8 +116,16 @@ export const userService = {
 
 // Serviços de clientes
 export const clienteService = {
-  list: async (search?: string): Promise<Cliente[]> => {
-    const params = search ? { search } : {};
+  list: async (filters?: { 
+    search?: string,
+    page?: number,
+    limit?: number
+  }): Promise<{ data: Cliente[], total: number, page: number, limit: number, total_pages: number }> => {
+    const params: any = {};
+    if (filters?.search) params.search = filters.search;
+    if (filters?.page) params.page = filters.page;
+    if (filters?.limit) params.limit = filters.limit;
+    
     const response = await api.get('/clientes/', { params });
     return response.data;
   },
@@ -145,12 +162,21 @@ export const clienteService = {
 
 // Serviços de licitações
 export const licitacaoService = {
-  list: async (filters?: { status_filter?: string, cliente_id?: number, sem_pedidos?: boolean, search?: string }): Promise<Licitacao[]> => {
+  list: async (filters?: { 
+    status_filter?: string, 
+    cliente_id?: number, 
+    sem_pedidos?: boolean, 
+    search?: string,
+    page?: number,
+    limit?: number
+  }): Promise<{ data: Licitacao[], total: number, page: number, limit: number, total_pages: number }> => {
     const params: any = {};
     if (filters?.status_filter) params.status_filter = filters.status_filter;
     if (filters?.cliente_id) params.cliente_id = filters.cliente_id;
     if (filters?.sem_pedidos) params.sem_pedidos = filters.sem_pedidos;
     if (filters?.search) params.search = filters.search;
+    if (filters?.page) params.page = filters.page;
+    if (filters?.limit) params.limit = filters.limit;
     
     const response = await api.get('/licitacoes/', { params });
     return response.data;
@@ -286,11 +312,21 @@ export const licitacaoService = {
 
 
 export const documentacaoService = {
-  list: async (clienteId?: number, status?: string, tipoDocumento?: string): Promise<Documentacao[]> => {
+  list: async (filters?: { 
+    clienteId?: number, 
+    status?: string, 
+    tipoDocumento?: string,
+    page?: number,
+    limit?: number,
+    search?: string
+  }): Promise<{ data: Documentacao[], total: number, page: number, limit: number, total_pages: number }> => {
     const params: any = {};
-    if (clienteId) params.cliente_id = clienteId;
-    if (status) params.status = status;
-    if (tipoDocumento) params.tipo_documento = tipoDocumento;
+    if (filters?.clienteId) params.cliente_id = filters.clienteId;
+    if (filters?.status) params.status = filters.status;
+    if (filters?.tipoDocumento) params.tipo_documento = filters.tipoDocumento;
+    if (filters?.page) params.page = filters.page;
+    if (filters?.limit) params.limit = filters.limit;
+    if (filters?.search) params.search = filters.search;
     
     const response = await api.get('/documentacoes/listar', { params });
     return response.data;
@@ -463,9 +499,23 @@ export const relatorioService = {
 // Serviço de Pedidos
 // FORÇAR ATUALIZAÇÃO - getRelatorioPorStatusPedidos
 export const pedidoService = {
-  list: async (): Promise<Pedido[]> => {
+  list: async (filters?: { 
+    page?: number, 
+    limit?: number,
+    search?: string,
+    status?: string,
+    cliente_id?: number
+  }): Promise<{ data: Pedido[], total: number, page: number, limit: number, total_pages: number }> => {
+    const params: any = {};
+    if (filters?.page) params.page = filters.page;
+    if (filters?.limit) params.limit = filters.limit;
+    if (filters?.search) params.search = filters.search;
+    if (filters?.status) params.status = filters.status;
+    if (filters?.cliente_id) params.cliente_id = filters.cliente_id;
+    
     // Forçar requisição sem cache
     const response = await api.get('/pedidos/', {
+      params,
       headers: {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache'
@@ -473,7 +523,7 @@ export const pedidoService = {
     });
     
     // Verificar se data_pagamento_previsto está presente
-    const pedido43 = response.data.find((p: any) => p.id === 43);
+    const pedido43 = response.data.data?.find((p: any) => p.id === 43);
     if (pedido43) {
     }
     
@@ -524,8 +574,19 @@ export const pedidoService = {
 
 // Serviço de Contratos
 export const contratoService = {
-  list: async (): Promise<Contrato[]> => {
-    const response = await api.get('/contratos/');
+  list: async (filters?: { 
+    page?: number, 
+    limit?: number,
+    search?: string,
+    status?: string
+  }): Promise<{ data: Contrato[], total: number, page: number, limit: number, total_pages: number }> => {
+    const params: any = {};
+    if (filters?.page) params.page = filters.page;
+    if (filters?.limit) params.limit = filters.limit;
+    if (filters?.search) params.search = filters.search;
+    if (filters?.status) params.status = filters.status;
+    
+    const response = await api.get('/contratos/', { params });
     return response.data;
   },
 

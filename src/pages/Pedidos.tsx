@@ -16,6 +16,7 @@ import { RefreshButton } from '../components/RefreshButton';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import CustomAlert from '../components/CustomAlert';
 import { useCustomAlert } from '../hooks/useCustomAlert';
+import Pagination from '../components/Pagination';
 
 interface PedidoWithDetails extends Pedido {
   licitacao: Licitacao;
@@ -48,6 +49,12 @@ const Pedidos: React.FC = () => {
     pedidos_concluidos: 0,
     pedidos_cancelados: 0
   });
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('');
@@ -56,7 +63,7 @@ const Pedidos: React.FC = () => {
   // Formulário
   const [formData, setFormData] = useState<PedidoCreate>({
     licitacao_id: 0,
-    data_criacao: new Date().toISOString().split('T')[0],
+    data_criacao: '', // Será preenchido automaticamente pelo backend
     empenho_feito: false,
     pedido_orgao_feito: false,
     contrato_feito: false,
@@ -103,7 +110,17 @@ const Pedidos: React.FC = () => {
   // 🎯 CORRIGIDO: useEffect otimizado para evitar loops infinitos
   useEffect(() => {
     carregarDados();
-  }, [filtroStatus, filtroCliente]);
+  }, [filtroStatus, filtroCliente, currentPage, itemsPerPage]);
+
+  // Funções de paginação
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset para primeira página
+  };
 
   // Listener para tecla Esc para fechar modais
   useEffect(() => {
@@ -159,14 +176,36 @@ const Pedidos: React.FC = () => {
     try {
       setLoading(true);
       
-      // Carregar pedidos
+      // Carregar pedidos com paginação
       try {
-        const pedidosData = await pedidoService.list();
+        const pedidosData = await pedidoService.list({
+          page: currentPage,
+          limit: itemsPerPage,
+          status: filtroStatus || undefined,
+          cliente_id: filtroCliente || undefined
+        });
         
-        
-        setPedidos(pedidosData as PedidoWithDetails[]);
+        // Verificar se a resposta tem formato paginado ou é um array direto
+        if (pedidosData && typeof pedidosData === 'object' && 'data' in pedidosData) {
+          // Formato paginado
+          setPedidos(pedidosData.data as PedidoWithDetails[]);
+          setTotalItems(pedidosData.total || 0);
+          setTotalPages(pedidosData.total_pages || 1);
+        } else if (Array.isArray(pedidosData)) {
+          // Formato array direto (fallback)
+          setPedidos(pedidosData as PedidoWithDetails[]);
+          setTotalItems((pedidosData as PedidoWithDetails[]).length);
+          setTotalPages(1);
+        } else {
+          setPedidos([]);
+          setTotalItems(0);
+          setTotalPages(1);
+        }
       } catch (error: any) {
+        console.error('Erro ao carregar pedidos:', error);
         setPedidos([]);
+        setTotalItems(0);
+        setTotalPages(1);
       }
 
       // Carregar estatísticas
@@ -180,17 +219,25 @@ const Pedidos: React.FC = () => {
       // 🎯 NOVO: Carregar contratos (para criar novos pedidos)
       
       try {
+        // Primeiro tentar contratos ativos para criação
         const contratosData = await contratoService.listarContratos();
         setContratos(contratosData);
       } catch (error: any) {
-        console.error('🎯 Erro ao carregar contratos:', error);
-        setContratos([]);
+        console.error('Erro ao carregar contratos ativos:', error);
+        // Se falhar, tentar endpoint geral
+        try {
+          const contratosData = await contratoService.list();
+          setContratos(contratosData.data || []);
+        } catch (error2: any) {
+          console.error('Erro ao carregar contratos gerais:', error2);
+          setContratos([]);
+        }
       }
 
       // Carregar clientes (sempre necessário para exibir informações)
       try {
         const clientesData = await clienteService.list();
-        setClientes(clientesData);
+        setClientes(clientesData.data || []);
       } catch (error: any) {
         setClientes([]);
       }
@@ -271,40 +318,109 @@ const Pedidos: React.FC = () => {
   const handleEdit = async (pedido: PedidoWithDetails) => {
     setEditingPedido(pedido);
     
-    // 🎯 CORRIGIDO: Carregar dados do contrato para esta licitação
+    // 🎯 NOVO: Para edição, sempre buscar o contrato original do pedido
     try {
-      // Primeiro, garantir que temos os contratos carregados
-      let contratosAtivos = contratos;
-      if (contratosAtivos.length === 0) {
-        contratosAtivos = await contratoService.listarContratos();
-        setContratos(contratosAtivos);
+      console.log('🎯 Editando pedido ID:', pedido.id, 'Licitação ID:', pedido.licitacao_id);
+      
+      // 🎯 NOVO: Buscar contrato específico para esta licitação
+      let contratoAtivo = null;
+      
+      try {
+        // Primeiro, tentar buscar contrato específico da licitação
+        contratoAtivo = await contratoService.getByLicitacao(pedido.licitacao_id);
+        console.log('🎯 Contrato encontrado via getByLicitacao:', contratoAtivo ? 'SIM' : 'NÃO');
+        
+        if (contratoAtivo) {
+          // Se encontrou, usar este contrato
+          const contratoDataBasico = {
+            contrato_existe: true,
+            contrato: contratoAtivo,
+            licitacao: {
+              id: contratoAtivo.licitacao?.id,
+              numero: contratoAtivo.licitacao?.numero,
+              tipo_classificacao: contratoAtivo.licitacao?.tipo_classificacao
+            },
+            itens: [],
+            itens_licitacao: [],
+            grupos_licitacao: []
+          };
+          
+          setContratoData(contratoDataBasico);
+          console.log('🎯 Contrato carregado com sucesso');
+        }
+        
+      } catch (error) {
+        console.error('Erro ao buscar contrato específico:', error);
       }
-      const contratoAtivo = contratosAtivos.find((c: any) => {
-        const contratoLicitacaoId = Number(c.licitacao.id);
-        const pedidoLicitacaoId = Number(pedido.licitacao_id);
-        return contratoLicitacaoId === pedidoLicitacaoId;
-      });
+      
+      // Se não encontrou contrato específico, tentar buscar em todos os contratos
+      if (!contratoAtivo) {
+        try {
+          // Buscar todos os contratos
+          let todosContratos = await contratoService.listarContratos();
+          
+          if (todosContratos.length === 0) {
+            todosContratos = await contratoService.list();
+          }
+          
+          setContratos(todosContratos);
+          
+          // Procurar contrato que corresponde à licitação do pedido
+          contratoAtivo = todosContratos.find((c: any) => {
+            const contratoLicitacaoId = Number(c.licitacao?.id);
+            const pedidoLicitacaoId = Number(pedido.licitacao_id);
+            return contratoLicitacaoId === pedidoLicitacaoId;
+          });
+          
+          console.log('🎯 Buscando em todos os contratos. Encontrados:', todosContratos.length);
+          console.log('🎯 Contrato encontrado:', contratoAtivo ? 'SIM' : 'NÃO');
+          
+        } catch (error) {
+          console.error('Erro ao buscar todos os contratos:', error);
+        }
+      }
       
       if (contratoAtivo) {
         
-        // Usar o mesmo endpoint que a criação usa
-        const contratoData = await contratoService.obterItensParaPedido(contratoAtivo.id);
-        
-        // 🎯 CORRIGIDO: Sempre mapear dados do contrato, mesmo se não houver itens disponíveis
-        const contratoDataMapeado = {
-          contrato_existe: true,
-          contrato: contratoData.contrato,
-          licitacao: {
-            id: contratoData.licitacao_id,
-            numero: contratoData.licitacao_numero,
-            tipo_classificacao: contratoData.tipo_classificacao
-          },
-          itens: contratoData.itens || [],
-          itens_licitacao: contratoData.itens_licitacao || [],
-          grupos_licitacao: contratoData.grupos_licitacao || []
-        };
-        
-        setContratoData(contratoDataMapeado);
+        try {
+          // Usar o mesmo endpoint que a criação usa
+          const contratoData = await contratoService.obterItensParaPedido(contratoAtivo.id);
+          
+          // 🎯 CORRIGIDO: Sempre mapear dados do contrato, mesmo se não houver itens disponíveis
+          const contratoDataMapeado = {
+            contrato_existe: true,
+            contrato: contratoData.contrato,
+            licitacao: {
+              id: contratoData.licitacao_id,
+              numero: contratoData.licitacao_numero,
+              tipo_classificacao: contratoData.tipo_classificacao
+            },
+            itens: contratoData?.itens || [],
+            itens_licitacao: contratoData.itens_licitacao || [],
+            grupos_licitacao: contratoData.grupos_licitacao || []
+          };
+          
+          setContratoData(contratoDataMapeado);
+          
+        } catch (error) {
+          console.error('Erro ao carregar dados do contrato:', error);
+          
+          // 🎯 NOVO: Se não conseguir carregar dados do contrato, usar dados básicos
+          const contratoDataBasico = {
+            contrato_existe: true,
+            contrato: contratoAtivo,
+            licitacao: {
+              id: contratoAtivo.licitacao?.id,
+              numero: contratoAtivo.licitacao?.numero,
+              tipo_classificacao: contratoAtivo.licitacao?.tipo_classificacao
+            },
+            itens: [],
+            itens_licitacao: [],
+            grupos_licitacao: []
+          };
+          
+          setContratoData(contratoDataBasico);
+        }
         
         // 🎯 CORRIGIDO: Para edição, carregar os itens que já existem no pedido
         if (pedido.itens_pedido && pedido.itens_pedido.length > 0) {
@@ -327,21 +443,63 @@ const Pedidos: React.FC = () => {
         }
           
         // Atualizar itens disponíveis baseados no contrato
-        setAvailableItems((contratoData.itens || []).map((item: any) => ({
-          id: item.id,
-          descricao: item.descricao || `Item ${item.id}`,
-          quantidade_disponivel: item.quantidade || 0
-        })));
+        if (contratoData && contratoData.itens) {
+          setAvailableItems(contratoData.itens.map((item: any) => ({
+            id: item.id,
+            descricao: item.descricao || `Item ${item.id}`,
+            quantidade_disponivel: item.quantidade || 0
+          })));
+        } else {
+          setAvailableItems([]);
+        }
       } else {
         setContratoData(null);
         setAvailableItems([]);
-        setPedidoItems([]);
+        
+        // 🎯 NOVO: Mesmo sem contrato, carregar os itens existentes do pedido
+        if (pedido.itens_pedido && pedido.itens_pedido.length > 0) {
+          const itensExistentes = pedido.itens_pedido.map((itemPedido: any) => {
+            return {
+              item_id: itemPedido.item_licitacao_id,
+              quantidade: itemPedido.quantidade_solicitada || 0,
+              max_quantidade: itemPedido.quantidade_solicitada || 0,
+              preco_unitario: itemPedido.preco_unitario || 0,
+              preco_total: itemPedido.preco_total || 0,
+              custo_unitario: itemPedido.custo_unitario || 0,
+              custo_total: itemPedido.custo_total || 0,
+              item_licitacao: itemPedido.item_licitacao
+            };
+          });
+          
+          setPedidoItems(itensExistentes);
+        } else {
+          setPedidoItems([]);
+        }
       }
     } catch (error) {
-      console.error('🎯 Erro ao carregar dados do contrato:', error);
+      console.error('Erro ao carregar dados do contrato:', error);
       setContratoData(null);
       setAvailableItems([]);
-      setPedidoItems([]);
+      
+      // 🎯 NOVO: Mesmo com erro, tentar carregar os itens existentes do pedido
+      if (pedido.itens_pedido && pedido.itens_pedido.length > 0) {
+        const itensExistentes = pedido.itens_pedido.map((itemPedido: any) => {
+          return {
+            item_id: itemPedido.item_licitacao_id,
+            quantidade: itemPedido.quantidade_solicitada || 0,
+            max_quantidade: itemPedido.quantidade_solicitada || 0,
+            preco_unitario: itemPedido.preco_unitario || 0,
+            preco_total: itemPedido.preco_total || 0,
+            custo_unitario: itemPedido.custo_unitario || 0,
+            custo_total: itemPedido.custo_total || 0,
+            item_licitacao: itemPedido.item_licitacao
+          };
+        });
+        
+        setPedidoItems(itensExistentes);
+      } else {
+        setPedidoItems([]);
+      }
     }
     
     // 🎯 NOVO: Calcular valor total do pedido baseado nos itens
@@ -379,8 +537,8 @@ const Pedidos: React.FC = () => {
       observacoes_pagamento: pedido.observacoes_pagamento,
       observacoes_gerais: pedido.observacoes_gerais,
       // 🎯 NOVO: Preencher automaticamente valor da nota fiscal com valor total do pedido
-      valor_nota_fiscal: pedido.valor_nota_fiscal || valorTotalPedido,
-      numero_nota_fiscal: pedido.numero_nota_fiscal || '',
+      valor_nota_fiscal: (pedido as any).valor_nota_fiscal || valorTotalPedido,
+      numero_nota_fiscal: (pedido as any).numero_nota_fiscal || '',
       pagamento_confirmado: pedido.status_pagamento === 'PAGO'
     };
     
@@ -772,7 +930,7 @@ const Pedidos: React.FC = () => {
   const resetForm = () => {
     setFormData({
       licitacao_id: 0,
-      data_criacao: new Date().toISOString().split('T')[0],
+      data_criacao: '', // Será preenchido automaticamente pelo backend
       empenho_feito: false,
       pedido_orgao_feito: false,
       contrato_feito: false,
@@ -871,7 +1029,7 @@ const Pedidos: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 pb-20">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Pedidos</h1>
         <div className="flex items-center gap-4">
@@ -956,7 +1114,7 @@ const Pedidos: React.FC = () => {
 
       {/* Cards de Pedidos */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {pedidos.map((pedido) => (
+        {pedidos && pedidos.length > 0 ? pedidos.map((pedido) => (
           <div key={pedido.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
             {/* Header do Card */}
             <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3">
@@ -1136,8 +1294,19 @@ const Pedidos: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
+        )) : (
+          <div className="col-span-full text-center py-12">
+            <div className="text-gray-400 mb-4">
+              <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum pedido encontrado</h3>
+            <p className="text-gray-600">Comece adicionando seu primeiro pedido.</p>
+          </div>
+        )}
       </div>
+
 
             {/* Modal de Criação/Edição Avançado */}
       {showModal && (
@@ -1164,85 +1333,97 @@ const Pedidos: React.FC = () => {
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* 🎯 NOVO: Seleção de Contrato */}
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h4 className="text-lg font-medium text-blue-900 mb-3">Selecionar Contrato Ativo</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-blue-700 mb-2">
-                      Contrato *
-                    </label>
-                    {/* Debug: Mostrar valor atual do select */}
-                    {editingPedido && (
-                      <div className="text-xs text-gray-500 mb-1">
-                        Debug: contratoData?.contrato?.id = {contratoData?.contrato?.id || 'undefined'}<br/>
-                        Debug: contratos.length = {contratos.length}<br/>
-                        Debug: pedido.licitacao_id = {editingPedido.licitacao_id}
-                      </div>
-                    )}
-                    <select
-                      value={editingPedido ? (contratoData?.contrato?.id || '') : (contratoData?.contrato?.id || '')}
-                      onChange={(e) => {
-                        handleContratoChange(Number(e.target.value));
-                      }}
-                      required
-                      disabled={!!editingPedido}
-                      className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    >
-                      <option value="">Selecione um contrato ativo</option>
-                      {contratos && contratos.length > 0 ? (
-                        contratos.map((contrato) => (
-                          <option key={contrato.id} value={contrato.id}>
-                            {contrato.numero_contrato} - {contrato.licitacao.numero} - {contrato.licitacao.descricao}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="" disabled>Nenhum contrato ativo disponível</option>
-                      )}
-                    </select>
-                    
-                    {/* 🎯 NOVO: Mensagem informativa sobre contratos ativos */}
-                    {contratos && contratos.length === 0 && (
-                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0">
-                            <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                            </svg>
+              {/* 🎯 NOVO: Seleção de Contrato - apenas para criação */}
+              {!editingPedido && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h4 className="text-lg font-medium text-blue-900 mb-3">Selecionar Contrato Ativo</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-blue-700 mb-2">
+                        Contrato *
+                      </label>
+                      <select
+                        value={contratoData?.contrato?.id || ''}
+                        onChange={(e) => {
+                          handleContratoChange(Number(e.target.value));
+                        }}
+                        required
+                        className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">Selecione um contrato ativo</option>
+                        {contratos && contratos.length > 0 ? (
+                          contratos.map((contrato) => (
+                            <option key={contrato.id} value={contrato.id}>
+                              {contrato.numero_contrato} - {contrato.licitacao.numero} - {contrato.licitacao.descricao}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="" disabled>Nenhum contrato ativo disponível</option>
+                        )}
+                      </select>
+                      
+                      {/* 🎯 NOVO: Mensagem informativa sobre contratos ativos */}
+                      {contratos && contratos.length === 0 && (
+                        <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0">
+                              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                            <div className="ml-3">
+                              <p className="text-sm text-yellow-700">
+                                Apenas contratos com status "ATIVO" são exibidos para criação de pedidos.
+                              </p>
+                            </div>
                           </div>
-                          <div className="ml-3">
-                            <p className="text-sm text-yellow-700">
-                              Apenas contratos com status "ATIVO" são exibidos para criação de pedidos.
-                            </p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {contratoData && contratoData.contrato_existe && (
+                      <div className="bg-white p-3 rounded border">
+                        <h5 className="font-medium text-blue-800 mb-2">Detalhes do Contrato Ativo</h5>
+                        <div className="text-sm space-y-1">
+                          <p><span className="font-medium">Número:</span> {contratoData.contrato.numero_contrato}</p>
+                          <p><span className="font-medium">Data:</span> {contratoData.contrato.data_contrato}</p>
+                          <p><span className="font-medium">Valor:</span> R$ {contratoData.contrato.valor_contrato?.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                          <p><span className="font-medium">Tipo Entrega:</span> {contratoData.contrato.tipo_entrega === 'ENTREGA_UNICA' ? 'Entrega Única' : 'Fornecimento Anual'}</p>
+                          {contratoData.contrato.prazo_contrato && (
+                            <p><span className="font-medium">Prazo:</span> {contratoData.contrato.prazo_contrato} dias</p>
+                          )}
+                          <p><span className="font-medium">Itens:</span> {contratoData?.itens?.length || 0} itens contratados</p>
+                          <div className="mt-2 p-2 bg-green-100 rounded border border-green-200">
+                            <p className="text-xs text-green-700 font-medium">✅ Contrato ativo - pronto para gerar pedidos</p>
                           </div>
                         </div>
                       </div>
                     )}
                   </div>
-                  
-                  {contratoData && contratoData.contrato_existe && (
-                    <div className="bg-white p-3 rounded border">
-                      <h5 className="font-medium text-blue-800 mb-2">Detalhes do Contrato Ativo</h5>
-                      <div className="text-sm space-y-1">
-                        <p><span className="font-medium">Número:</span> {contratoData.contrato.numero_contrato}</p>
-                        <p><span className="font-medium">Data:</span> {contratoData.contrato.data_contrato}</p>
-                        <p><span className="font-medium">Valor:</span> R$ {contratoData.contrato.valor_contrato?.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                        <p><span className="font-medium">Tipo Entrega:</span> {contratoData.contrato.tipo_entrega === 'ENTREGA_UNICA' ? 'Entrega Única' : 'Fornecimento Anual'}</p>
-                        {contratoData.contrato.prazo_contrato && (
-                          <p><span className="font-medium">Prazo:</span> {contratoData.contrato.prazo_contrato} dias</p>
-                        )}
-                        <p><span className="font-medium">Itens:</span> {contratoData.itens.length} itens contratados</p>
-                        <div className="mt-2 p-2 bg-green-100 rounded border border-green-200">
-                          <p className="text-xs text-green-700 font-medium">✅ Contrato ativo - pronto para gerar pedidos</p>
-                        </div>
+                </div>
+              )}
 
+              {/* 🎯 NOVO: Informações do Contrato - apenas para edição */}
+              {editingPedido && contratoData && contratoData.contrato && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h4 className="text-lg font-medium text-blue-900 mb-3">Contrato Vinculado ao Pedido</h4>
+                  <div className="bg-white p-3 rounded border">
+                    <div className="text-sm space-y-1">
+                      <p><span className="font-medium">Número:</span> {contratoData.contrato.numero_contrato}</p>
+                      <p><span className="font-medium">Data:</span> {contratoData.contrato.data_contrato}</p>
+                      <p><span className="font-medium">Valor:</span> R$ {contratoData.contrato.valor_contrato?.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                      <p><span className="font-medium">Tipo Entrega:</span> {contratoData.contrato.tipo_entrega === 'ENTREGA_UNICA' ? 'Entrega Única' : 'Fornecimento Anual'}</p>
+                      {contratoData.contrato.prazo_contrato && (
+                        <p><span className="font-medium">Prazo:</span> {contratoData.contrato.prazo_contrato} dias</p>
+                      )}
+                      <p><span className="font-medium">Itens:</span> {contratoData?.itens?.length || 0} itens contratados</p>
+                      <div className="mt-2 p-2 bg-blue-100 rounded border border-blue-200">
+                        <p className="text-xs text-blue-700 font-medium">📋 Contrato vinculado - informações para referência</p>
                       </div>
                     </div>
-                  )}
-                  
-
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Status Geral */}
               <div>
@@ -1268,31 +1449,46 @@ const Pedidos: React.FC = () => {
                 </label>
                 <input
                   type="date"
-                  value={formData.data_criacao || new Date().toISOString().split('T')[0]}
+                  value={formData.data_criacao || ''}
                   onChange={(e) => setFormData({...formData, data_criacao: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={!editingPedido} // Só permite editar se estiver editando um pedido existente
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
+                {!editingPedido && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    A data de criação será definida automaticamente pelo sistema
+                  </p>
+                )}
               </div>
 
               {/* 🎯 NOVO: Seção de Itens do Pedido baseados no Contrato */}
-              {contratoData && contratoData.contrato_existe && (
+              {((contratoData && contratoData.contrato_existe) || (editingPedido && pedidoItems.length > 0)) && (
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-lg font-medium text-green-900">📋 Itens para o Pedido</h4>
+                    <h4 className="text-lg font-medium text-green-900">📋 Itens do Pedido</h4>
                     <div className="flex items-center space-x-2">
-                      <div className="text-sm text-green-700 bg-green-100 px-2 py-1 rounded">
-                        {contratoData.itens.length} itens disponíveis
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // 🎯 NOVO: Abrir modal para adicionar itens
-                          setShowAddItemModal(true);
-                        }}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
-                      >
-                        + Adicionar Item
-                      </button>
+                      {contratoData && contratoData.contrato_existe && (
+                        <>
+                          <div className="text-sm text-green-700 bg-green-100 px-2 py-1 rounded">
+                            {contratoData?.itens?.length || 0} itens disponíveis
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // 🎯 NOVO: Abrir modal para adicionar itens
+                              setShowAddItemModal(true);
+                            }}
+                            className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                          >
+                            + Adicionar Item
+                          </button>
+                        </>
+                      )}
+                      {editingPedido && (!contratoData || !contratoData.contrato_existe) && (
+                        <div className="text-sm text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                          Modo de edição - itens podem ser editados
+                        </div>
+                      )}
                     </div>
                   </div>
                   
@@ -1302,7 +1498,9 @@ const Pedidos: React.FC = () => {
                     {pedidoItems.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
                         <p>Nenhum item adicionado ao pedido ainda.</p>
-                        <p className="text-sm mt-1">Clique em "Adicionar Item" para começar.</p>
+                        {contratoData && contratoData.contrato_existe && (
+                          <p className="text-sm mt-1">Clique em "Adicionar Item" para começar.</p>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -1328,7 +1526,8 @@ const Pedidos: React.FC = () => {
                                       'quantidade', 
                                       e.target.value === '' ? '' : Number(e.target.value)
                                     )}
-                                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                                    disabled={false}
+                                    className="w-16 px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
                                     placeholder={`Max: ${item.max_quantidade}`}
                                   />
                                   <div className="text-xs text-gray-500 mt-1">
@@ -1344,7 +1543,8 @@ const Pedidos: React.FC = () => {
                                   min="0"
                                   value={item.custo_unitario || ''}
                                   onChange={(e) => handleItemChange(item.item_id, 'custo_unitario', e.target.value === '' ? 0 : parseFloat(e.target.value))}
-                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                  disabled={false}
+                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                                   placeholder="0,00"
                                 />
                               </div>
@@ -1365,7 +1565,8 @@ const Pedidos: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => removeItemFromPedido(index)}
-                                  className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs transition-colors"
+                                  disabled={false}
+                                  className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                                   title="Remover item do pedido"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -1454,15 +1655,17 @@ const Pedidos: React.FC = () => {
                   {/* Data de Entrega */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Data de Entrega
+                      Data de Entrega (Estimativa)
                     </label>
                     <input
                       type="date"
                       value={formData.data_entrega || ''}
                       onChange={(e) => setFormData({...formData, data_entrega: e.target.value})}
-                      disabled={!formData.entrega_confirmada}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Data estimada para entrega (não depende da confirmação)
+                    </p>
                   </div>
 
 
@@ -2038,6 +2241,20 @@ const Pedidos: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Componente de Paginação - Fixo na parte inferior */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 md:left-64">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          showItemsPerPage={true}
+          itemsPerPageOptions={[10, 25, 50, 100]}
+        />
+      </div>
 
       {/* 🎯 NOVO: Alerta Customizado */}
       <CustomAlert

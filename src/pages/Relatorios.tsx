@@ -53,20 +53,12 @@ const Relatorios: React.FC = () => {
     () => pedidoService.getRelatorioPorStatusPedidos(selectedClienteId ? Number(selectedClienteId) : undefined),
     { enabled: reportType === 'status', staleTime: 30000, refetchOnWindowFocus: true }
   );
-  const { data: estatisticasGerais } = useQuery(
-    ['estatisticas-gerais', selectedClienteId, selectedPedidoId], 
-    () => licitacaoService.getEstatisticasGerais(
-      selectedClienteId ? Number(selectedClienteId) : undefined,
-      selectedPedidoId ? Number(selectedPedidoId) : undefined
-    ),
-    { enabled: reportType === 'financial', refetchOnWindowFocus: true, staleTime: 30000 }
-  );
 
   // Relatório financeiro detalhado (baseado em pedidos)
   const { data: relatorioFinanceiro } = useQuery(
     ['relatorio-financeiro-pedidos'], 
     () => relatorioService.financeiro(),
-    { enabled: reportType === 'financial-detailed', refetchOnWindowFocus: true, staleTime: 30000 }
+    { enabled: reportType === 'financial' || reportType === 'financial-detailed', refetchOnWindowFocus: true, staleTime: 30000 }
   );
 
   // Dados para gráficos
@@ -91,7 +83,7 @@ const Relatorios: React.FC = () => {
   // Lista de todos os pedidos para filtro
   const { data: todosPedidos = [] } = useQuery(
     ['todos-pedidos', selectedClienteId], 
-    () => pedidoService.list(undefined, selectedClienteId ? Number(selectedClienteId) : undefined),
+    () => pedidoService.list({ cliente_id: selectedClienteId ? Number(selectedClienteId) : undefined }),
     { enabled: reportType === 'financial' || reportType === 'financial-detailed', staleTime: 30000 }
   );
 
@@ -215,7 +207,7 @@ const Relatorios: React.FC = () => {
               className="input-field w-48"
             >
               <option value="">Todos os clientes</option>
-              {clientes.map((cliente: any) => (
+              {(Array.isArray(clientes) ? clientes : clientes.data || []).map((cliente: any) => (
                 <option key={cliente.id} value={cliente.id}>
                   {cliente.nome}
                 </option>
@@ -242,7 +234,7 @@ const Relatorios: React.FC = () => {
                   className="input-field w-48"
                 >
                   <option value="">Selecione um pedido</option>
-                  {todosPedidos.map((pedido: any) => (
+                  {(Array.isArray(todosPedidos) ? todosPedidos : todosPedidos.data || []).map((pedido: any) => (
                     <option key={pedido.id} value={pedido.id}>
                       Pedido #{pedido.id} - {pedido.licitacao?.descricao?.substring(0, 30)}...
                     </option>

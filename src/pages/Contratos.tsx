@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import CustomAlert from '../components/CustomAlert';
 import { useCustomAlert } from '../hooks/useCustomAlert';
 import toast from 'react-hot-toast'; // 🎯 NOVO: Import para notificações
+import Pagination from '../components/Pagination';
 
 const Contratos: React.FC = () => {
   const { user } = useAuth();
@@ -20,6 +21,10 @@ const Contratos: React.FC = () => {
   const [selectedLicitacao, setSelectedLicitacao] = useState<Licitacao | null>(null);
   const [viewingItem, setViewingItem] = useState<any>(null);
   const [showItemModal, setShowItemModal] = useState(false);
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [formData, setFormData] = useState({
     numero_contrato: '',
     data_contrato: '',
@@ -30,18 +35,43 @@ const Contratos: React.FC = () => {
     status: 'ATIVO'
   });
 
-  // Buscar contratos
-  const { data: contratos = [], isLoading, error } = useQuery(
-    'contratos',
-    contratoService.list,
+  // Buscar contratos com paginação
+  const { data: contratosData, isLoading, error } = useQuery(
+    ['contratos', currentPage, itemsPerPage, searchTerm, statusFilter],
+    () => contratoService.list({
+      page: currentPage,
+      limit: itemsPerPage,
+      search: searchTerm || undefined,
+      status: statusFilter || undefined
+    }),
     {
       enabled: !!user,
       refetchOnWindowFocus: false,
     }
   );
 
+  // Extrair dados da resposta paginada
+  // Verificar se é uma resposta paginada ou array direto
+  let contratos: Contrato[] = [];
+  let totalItems = 0;
+  let totalPages = 1;
+  
+  if (contratosData) {
+    if (Array.isArray(contratosData)) {
+      // Resposta é um array direto
+      contratos = contratosData;
+      totalItems = contratosData.length;
+      totalPages = 1;
+    } else if (contratosData.data && Array.isArray(contratosData.data)) {
+      // Resposta é paginada
+      contratos = contratosData.data;
+      totalItems = contratosData.total || contratosData.data.length;
+      totalPages = contratosData.total_pages || 1;
+    }
+  }
+
   // Buscar licitações para seleção - APENAS COM STATUS GANHO
-  const { data: licitacoes = [] } = useQuery(
+  const { data: licitacoesData } = useQuery(
     'licitacoes-ganhas',
     () => licitacaoService.list({ status_filter: 'GANHO' }),
     {
@@ -49,6 +79,9 @@ const Contratos: React.FC = () => {
       refetchOnWindowFocus: false,
     }
   );
+
+  // Extrair dados da resposta paginada
+  const licitacoes = licitacoesData?.data || [];
 
   // Buscar estatísticas
   const { data: stats } = useQuery(
@@ -114,20 +147,10 @@ const Contratos: React.FC = () => {
     }
   });
 
-  // Filtrar contratos
-  const filteredContratos = contratos.filter((contrato) => {
-    const matchesSearch = 
-      contrato.numero_contrato.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contrato.licitacao?.numero?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contrato.licitacao?.descricao?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === '' || contrato.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  // Filtros agora são aplicados no backend, não precisamos mais de filtro local
 
   // Filtrar licitações que não têm contrato (já filtradas por status GANHO)
-  const licitacoesDisponiveis = licitacoes.filter(licitacao => {
+  const licitacoesDisponiveis = licitacoes.filter((licitacao: any) => {
     return !contratos.some(contrato => contrato.licitacao_id === licitacao.id);
   });
 
@@ -148,7 +171,7 @@ const Contratos: React.FC = () => {
   // Carregar dados da licitação selecionada
   const handleLicitacaoChange = async (licitacaoId: string) => {
     if (licitacaoId) {
-      const licitacao = licitacoes.find(l => l.id === parseInt(licitacaoId));
+      const licitacao = licitacoes.find((l: any) => l.id === parseInt(licitacaoId));
       if (licitacao) {
         setSelectedLicitacao(licitacao);
         setFormData(prev => ({
@@ -220,6 +243,21 @@ const Contratos: React.FC = () => {
     setGruposItens([]);
     setResumoFinanceiro(null);
   };
+
+  // Funções de paginação
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset para primeira página
+  };
+
+  // Reset da página quando filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   // Abrir modal para criar novo contrato
   const handleNewContrato = () => {
@@ -378,7 +416,7 @@ const Contratos: React.FC = () => {
   if (error) return <div className="text-red-600">Erro ao carregar contratos</div>;
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 pb-20">
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
@@ -479,7 +517,7 @@ const Contratos: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredContratos.map((contrato) => (
+              {contratos.map((contrato) => (
                 <tr key={contrato.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {contrato.numero_contrato}
@@ -531,11 +569,12 @@ const Contratos: React.FC = () => {
           </table>
         </div>
         
-        {filteredContratos.length === 0 && (
+        {contratos.length === 0 && (
           <div className="text-center py-12">
             <p className="text-gray-500">Nenhum contrato encontrado</p>
           </div>
         )}
+
       </div>
 
       {/* Modal de Criar/Editar Contrato */}
@@ -580,7 +619,7 @@ const Contratos: React.FC = () => {
                           className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Selecione uma licitação</option>
-                          {licitacoesDisponiveis.map((licitacao) => (
+                          {licitacoesDisponiveis.map((licitacao: any) => (
                             <option key={licitacao.id} value={licitacao.id}>
                               {licitacao.numero} - {licitacao.descricao?.substring(0, 50)}...
                             </option>
@@ -1213,6 +1252,20 @@ const Contratos: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Componente de Paginação - Fixo na parte inferior */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 md:left-64">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          showItemsPerPage={true}
+          itemsPerPageOptions={[10, 25, 50, 100]}
+        />
+      </div>
 
       {/* 🎯 NOVO: Alerta Customizado */}
       <CustomAlert

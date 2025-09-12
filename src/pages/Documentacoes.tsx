@@ -21,6 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { documentacaoService } from '../services/api';
 import { clienteService } from '../services/api';
 import { RefreshButton } from '../components/RefreshButton';
+import Pagination from '../components/Pagination';
 
 
 const Documentacoes: React.FC = () => {
@@ -48,6 +49,10 @@ const Documentacoes: React.FC = () => {
   
   // Estado para alternar entre visualizações
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const isAdmin = user?.is_admin;
   const queryClient = useQueryClient();
 
@@ -58,16 +63,39 @@ const Documentacoes: React.FC = () => {
     { enabled: isAdmin }
   );
 
-  // Buscar documentações
-  const { data: documentacoes = [], isLoading } = useQuery(
-    ['documentacoes', selectedClienteId, statusFilter, tipoFilter],
-    () => documentacaoService.list(
-      selectedClienteId ? Number(selectedClienteId) : undefined,
-      statusFilter || undefined,
-      tipoFilter || undefined
-    ),
+  // Buscar documentações com paginação
+  const { data: documentacoesData, isLoading } = useQuery(
+    ['documentacoes', selectedClienteId, statusFilter, tipoFilter, currentPage, itemsPerPage],
+    () => documentacaoService.list({
+      clienteId: selectedClienteId ? Number(selectedClienteId) : undefined,
+      status: statusFilter || undefined,
+      tipoDocumento: tipoFilter || undefined,
+      page: currentPage,
+      limit: itemsPerPage,
+      search: searchTerm || undefined
+    }),
     { enabled: !!user }
   );
+
+  // Extrair dados da resposta paginada
+  // Verificar se é uma resposta paginada ou array direto
+  let documentacoes = [];
+  let totalItems = 0;
+  let totalPages = 1;
+  
+  if (documentacoesData) {
+    if (Array.isArray(documentacoesData)) {
+      // Resposta é um array direto
+      documentacoes = documentacoesData;
+      totalItems = documentacoesData.length;
+      totalPages = 1;
+    } else if (documentacoesData.data && Array.isArray(documentacoesData.data)) {
+      // Resposta é paginada
+      documentacoes = documentacoesData.data;
+      totalItems = documentacoesData.total || documentacoesData.data.length;
+      totalPages = documentacoesData.total_pages || 1;
+    }
+  }
 
   // Buscar documentos vencendo
   const { data: documentosVencendo = [] } = useQuery(
@@ -131,6 +159,21 @@ const Documentacoes: React.FC = () => {
       deleteMutation.mutate(id);
     }
   };
+
+  // Funções de paginação
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset para primeira página
+  };
+
+  // Reset da página quando filtros mudarem
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedClienteId, statusFilter, tipoFilter, searchTerm]);
 
   // Funções para edição inline
   const handleDoubleClick = (id: number, field: string, currentValue: string) => {
@@ -270,16 +313,8 @@ const Documentacoes: React.FC = () => {
     }
   };
 
-  // Filtrar e ordenar documentações
-  const filteredDocumentacoes = documentacoes.filter(doc =>
-    doc.titulo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.descricao?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.tipo_documento.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (doc.cnpj_extraido && doc.cnpj_extraido.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (doc.razao_social_extraida && doc.razao_social_extraida.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const filteredAndSortedDocumentacoes = [...filteredDocumentacoes].sort((a, b) =>
+  // Filtros agora são aplicados no backend, não precisamos mais de filtro local
+  const filteredAndSortedDocumentacoes = [...documentacoes].sort((a, b) =>
     sortDocuments(a, b, sortField, sortDirection)
   );
 
@@ -346,7 +381,7 @@ const Documentacoes: React.FC = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 pb-20">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Documentações</h1>
         <div className="flex items-center gap-4">
@@ -556,7 +591,7 @@ const Documentacoes: React.FC = () => {
       ) : (
         <div>
           <div className="mb-4 text-sm text-gray-600">
-            Mostrando {filteredAndSortedDocumentacoes.length} de {documentacoes.length} documentos
+            Mostrando {totalItems} documentos
             {viewMode === 'table' && (
               <span className="ml-4 text-xs text-blue-600">
                 💡 Dica: Clique duas vezes em qualquer campo para editar inline
@@ -849,6 +884,7 @@ const Documentacoes: React.FC = () => {
           )}
         </div>
       )}
+
 
       {/* Modal de formulário */}
       {showForm && (
@@ -1302,6 +1338,20 @@ const DocumentacaoForm: React.FC<DocumentacaoFormProps> = ({ documentacao, isAdm
             </div>
           </form>
         </div>
+      </div>
+
+      {/* Componente de Paginação - Fixo na parte inferior */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 md:left-64">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          showItemsPerPage={true}
+          itemsPerPageOptions={[10, 25, 50, 100]}
+        />
       </div>
     </div>
   );

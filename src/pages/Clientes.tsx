@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { clienteService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,6 +17,7 @@ import {
 import toast from 'react-hot-toast';
 import ClienteForm from '../components/ClienteForm';
 import { Cliente } from '../types';
+import Pagination from '../components/Pagination';
 
 const Clientes: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,11 +28,39 @@ const Clientes: React.FC = () => {
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
   const { isAdmin } = useAuth();
   const queryClient = useQueryClient();
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
-  const { data: clientes = [], isLoading } = useQuery(
-    ['clientes', searchTerm],
-    () => clienteService.list(searchTerm || undefined)
+  const { data: clientesData, isLoading } = useQuery(
+    ['clientes', searchTerm, currentPage, itemsPerPage],
+    () => clienteService.list({
+      search: searchTerm || undefined,
+      page: currentPage,
+      limit: itemsPerPage
+    })
   );
+
+  // Extrair dados da resposta paginada
+  // Verificar se é uma resposta paginada ou array direto
+  let clientes = [];
+  let totalItems = 0;
+  let totalPages = 1;
+  
+  if (clientesData) {
+    if (Array.isArray(clientesData)) {
+      // Resposta é um array direto
+      clientes = clientesData;
+      totalItems = clientesData.length;
+      totalPages = 1;
+    } else if (clientesData.data && Array.isArray(clientesData.data)) {
+      // Resposta é paginada
+      clientes = clientesData.data;
+      totalItems = clientesData.total || clientesData.data.length;
+      totalPages = clientesData.total_pages || 1;
+    }
+  }
 
   const deleteMutation = useMutation(
     (id: number) => clienteService.delete(id),
@@ -68,6 +97,21 @@ const Clientes: React.FC = () => {
     setEditingCliente(null);
   };
 
+  // Funções de paginação
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset para primeira página
+  };
+
+  // Reset da página quando filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   const formatCPFCNPJ = (cpfCnpj: string) => {
     if (cpfCnpj.length === 11) {
       return cpfCnpj.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
@@ -86,7 +130,7 @@ const Clientes: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">
           {isAdmin ? 'Clientes' : 'Dados da Empresa'}
@@ -212,6 +256,21 @@ const Clientes: React.FC = () => {
           </p>
         </div>
       )}
+
+
+      {/* Componente de Paginação - Fixo na parte inferior */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 md:left-64">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          showItemsPerPage={true}
+          itemsPerPageOptions={[10, 25, 50, 100]}
+        />
+      </div>
 
       {/* Modal de formulário */}
       {showForm && (

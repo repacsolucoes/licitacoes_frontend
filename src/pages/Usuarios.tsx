@@ -17,6 +17,7 @@ import {
 import toast from 'react-hot-toast';
 import UserForm from '../components/UserForm';
 import { User as UserType } from '../types';
+import Pagination from '../components/Pagination';
 
 const Usuarios: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,11 +27,39 @@ const Usuarios: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const queryClient = useQueryClient();
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
-  const { data: users = [], isLoading } = useQuery(
-    ['users', searchTerm],
-    () => userService.list()
+  const { data: usersData, isLoading } = useQuery(
+    ['users', searchTerm, currentPage, itemsPerPage],
+    () => userService.list({
+      search: searchTerm || undefined,
+      page: currentPage,
+      limit: itemsPerPage
+    })
   );
+
+  // Extrair dados da resposta paginada
+  // Verificar se é uma resposta paginada ou array direto
+  let users = [];
+  let totalItems = 0;
+  let totalPages = 1;
+  
+  if (usersData) {
+    if (Array.isArray(usersData)) {
+      // Resposta é um array direto
+      users = usersData;
+      totalItems = usersData.length;
+      totalPages = 1;
+    } else if (usersData.data && Array.isArray(usersData.data)) {
+      // Resposta é paginada
+      users = usersData.data;
+      totalItems = usersData.total || usersData.data.length;
+      totalPages = usersData.total_pages || 1;
+    }
+  }
 
   const deleteMutation = useMutation(
     (id: number) => userService.delete(id),
@@ -67,12 +96,22 @@ const Usuarios: React.FC = () => {
     setEditingUser(null);
   };
 
-  // Filtrar usuários por busca
-  const filteredUsers = users.filter(user => 
-    user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Funções de paginação
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset para primeira página
+  };
+
+  // Reset da página quando filtros mudarem
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Filtros agora são aplicados no backend, não precisamos mais de filtro local
 
   if (isLoading) {
     return (
@@ -83,7 +122,7 @@ const Usuarios: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Usuários</h1>
         <div className="flex items-center gap-4">
@@ -112,7 +151,7 @@ const Usuarios: React.FC = () => {
 
       {/* Lista de usuários */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredUsers.map((user) => (
+        {users.map((user) => (
           <div key={user.id} className="card">
             <div className="flex items-start justify-between">
               <div className="flex items-center space-x-3">
@@ -179,7 +218,7 @@ const Usuarios: React.FC = () => {
         ))}
       </div>
 
-      {filteredUsers.length === 0 && (
+      {users.length === 0 && (
         <div className="text-center py-12">
           <User className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum usuário encontrado</h3>
@@ -191,6 +230,21 @@ const Usuarios: React.FC = () => {
           </p>
         </div>
       )}
+
+
+      {/* Componente de Paginação - Fixo na parte inferior */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 md:left-64">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          showItemsPerPage={true}
+          itemsPerPageOptions={[10, 25, 50, 100]}
+        />
+      </div>
 
       {/* Modal de formulário */}
       {showForm && (

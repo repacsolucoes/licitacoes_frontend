@@ -10,9 +10,11 @@ import { ptBR } from 'date-fns/locale';
 import LicitacaoComItensForm from '../components/LicitacaoComItensForm';
 import CustomAlert from '../components/CustomAlert';
 import { useCustomAlert } from '../hooks/useCustomAlert';
+import Pagination from '../components/Pagination';
 
 const Licitacoes: React.FC = () => {
   const { alertState, hideAlert, confirm } = useCustomAlert();
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [showFormComItens, setShowFormComItens] = useState(false);
   const [editingLicitacao, setEditingLicitacao] = useState<Licitacao | null>(null);
@@ -20,26 +22,49 @@ const Licitacoes: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
   const [viewingLicitacao, setViewingLicitacao] = useState<Licitacao | null>(null);
+  
+  // Estados para paginação
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
 
   const queryClient = useQueryClient();
 
-  // Buscar licitações com filtros
-  const { data: licitacoes = [], isLoading, refetch } = useQuery(
-    ['licitacoes', selectedClienteId, selectedStatus, searchTerm],
+  // Buscar licitações com filtros e paginação
+  const { data: licitacoesData, isLoading, refetch, error } = useQuery(
+    ['licitacoes', selectedClienteId, selectedStatus, searchTerm, currentPage, itemsPerPage],
     () => licitacaoService.list({
       cliente_id: selectedClienteId || undefined,
       status_filter: selectedStatus || undefined,
-      search: searchTerm || undefined
+      search: searchTerm || undefined,
+      page: currentPage,
+      limit: itemsPerPage
     }),
     {
-      onSuccess: (data) => {
-        // Licitações carregadas com sucesso
-      },
       onError: (error) => {
         console.error('Erro ao carregar licitações:', error);
       }
     }
   );
+
+  // Extrair dados da resposta paginada
+  // Verificar se é uma resposta paginada ou array direto
+  let licitacoes = [];
+  let totalItems = 0;
+  let totalPages = 1;
+  
+  if (licitacoesData) {
+    if (Array.isArray(licitacoesData)) {
+      // Resposta é um array direto
+      licitacoes = licitacoesData;
+      totalItems = licitacoesData.length;
+      totalPages = 1;
+    } else if (licitacoesData.data && Array.isArray(licitacoesData.data)) {
+      // Resposta é paginada
+      licitacoes = licitacoesData.data;
+      totalItems = licitacoesData.total || licitacoesData.data.length;
+      totalPages = licitacoesData.total_pages || 1;
+    }
+  }
 
   // Buscar clientes para filtro
   const { data: clientes = [] } = useQuery(
@@ -72,6 +97,21 @@ const Licitacoes: React.FC = () => {
     setEditingLicitacao(null);
     queryClient.invalidateQueries('licitacoes');
   };
+
+  // Funções de paginação
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset para primeira página
+  };
+
+  // Reset da página quando filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedClienteId, selectedStatus, searchTerm]);
 
   const handleEdit = async (licitacao: Licitacao) => {
     try {
@@ -173,12 +213,7 @@ const Licitacoes: React.FC = () => {
     };
   }, [showFormComItens, viewingLicitacao, handleCloseFormWithConfirm]); // 🎯 REMOVIDO: alertState.isOpen da dependência
 
-  const filteredLicitacoes = licitacoes.filter(licitacao => {
-    if (searchTerm && !licitacao.descricao.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return false;
-    }
-    return true;
-  });
+  // Filtros agora são aplicados no backend, não precisamos mais de filtro local
 
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat('pt-BR', {
@@ -196,7 +231,7 @@ const Licitacoes: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto px-2 py-8">
+    <div className="container mx-auto px-2 py-8 pb-20">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Licitações</h1>
@@ -296,7 +331,7 @@ const Licitacoes: React.FC = () => {
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">
-              Mostrando {filteredLicitacoes.length} licitação{filteredLicitacoes.length !== 1 ? 'ões' : ''}
+              Mostrando {totalItems} licitação{totalItems !== 1 ? 'ões' : ''}
             </span>
             {(selectedClienteId || selectedStatus || searchTerm) && (
               <button
@@ -316,7 +351,23 @@ const Licitacoes: React.FC = () => {
           <RefreshCw className="h-8 w-8 text-gray-400 animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Carregando licitações...</p>
         </div>
-      ) : filteredLicitacoes.length === 0 ? (
+      ) : error ? (
+        <div className="text-center py-12">
+          <div className="text-red-400 mb-4">
+            <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-red-600 mb-2">Erro ao carregar licitações</h3>
+          <p className="text-gray-600 mb-4">Verifique sua conexão e tente novamente.</p>
+          <button
+            onClick={() => refetch()}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      ) : licitacoes.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-gray-400 mb-4">
             <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -328,7 +379,7 @@ const Licitacoes: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredLicitacoes.map((licitacao) => (
+          {licitacoes.map((licitacao) => (
             <div key={licitacao.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
               {/* Header do Card */}
               <div className="p-4 border-b border-gray-100">
@@ -425,6 +476,7 @@ const Licitacoes: React.FC = () => {
         </div>
       )}
 
+
       {/* Modal de formulário com itens */}
       {showFormComItens && (
         <LicitacaoComItensForm
@@ -434,6 +486,20 @@ const Licitacoes: React.FC = () => {
           editingLicitacao={editingLicitacao}
         />
       )}
+
+      {/* Componente de Paginação - Fixo na parte inferior */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 md:left-64">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          showItemsPerPage={true}
+          itemsPerPageOptions={[10, 25, 50, 100]}
+        />
+      </div>
 
       {/* 🎯 NOVO: Alerta Customizado */}
       <CustomAlert
