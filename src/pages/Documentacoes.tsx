@@ -972,6 +972,20 @@ const Documentacoes: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Componente de Paginação - Fixo na parte inferior */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 md:left-64">
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          itemsPerPage={itemsPerPage}
+          onPageChange={handlePageChange}
+          onItemsPerPageChange={handleItemsPerPageChange}
+          showItemsPerPage={true}
+          itemsPerPageOptions={[10, 25, 50, 100]}
+        />
+      </div>
     </div>
   );
 };
@@ -1340,19 +1354,6 @@ const DocumentacaoForm: React.FC<DocumentacaoFormProps> = ({ documentacao, isAdm
         </div>
       </div>
 
-      {/* Componente de Paginação - Fixo na parte inferior */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40 md:left-64">
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          itemsPerPage={itemsPerPage}
-          onPageChange={handlePageChange}
-          onItemsPerPageChange={handleItemsPerPageChange}
-          showItemsPerPage={true}
-          itemsPerPageOptions={[10, 25, 50, 100]}
-        />
-      </div>
     </div>
   );
 };
