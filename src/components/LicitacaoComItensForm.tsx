@@ -402,7 +402,7 @@ const LicitacaoComItensForm: React.FC<LicitacaoComItensFormProps> = ({ onClose, 
   };
 
   // Funções para itens individuais
-  const handleAddItem = (item: Omit<ItemLicitacao, 'id' | 'licitacao_id' | 'created_at' | 'updated_at'>) => {
+  const handleAddItem = async (item: Omit<ItemLicitacao, 'id' | 'licitacao_id' | 'created_at' | 'updated_at'>) => {
     const newItem: ItemLicitacao = {
       ...item,
       id: Date.now(),
@@ -412,7 +412,28 @@ const LicitacaoComItensForm: React.FC<LicitacaoComItensFormProps> = ({ onClose, 
     };
 
     if (editingItem) {
-      setItems(prev => prev.map(i => i.id === editingItem.id ? newItem : i));
+      // Se estiver editando uma licitação existente, fazer requisição para o backend
+      if (editingLicitacao) {
+        try {
+          console.log('🔍 DEBUG Frontend: Atualizando item no backend:', {
+            licitacaoId: editingLicitacao.id,
+            itemId: editingItem.id,
+            itemData: item
+          });
+          
+          const updatedItem = await licitacaoService.updateItem(editingLicitacao.id, editingItem.id, item);
+          console.log('🔍 DEBUG Frontend: Item atualizado no backend:', updatedItem);
+          
+          setItems(prev => prev.map(i => i.id === editingItem.id ? updatedItem : i));
+        } catch (error) {
+          console.error('Erro ao atualizar item:', error);
+          toast.error('Erro ao atualizar item');
+          return;
+        }
+      } else {
+        // Se estiver criando nova licitação, apenas atualizar estado local
+        setItems(prev => prev.map(i => i.id === editingItem.id ? newItem : i));
+      }
       setEditingItem(null);
     } else {
       setItems(prev => [...prev, newItem]);
@@ -565,7 +586,16 @@ const LicitacaoComItensForm: React.FC<LicitacaoComItensFormProps> = ({ onClose, 
       grupos: formData.tipo_classificacao === 'GRUPO' ? grupos : undefined
     };
 
-
+    console.log('🔍 DEBUG Frontend: Dados sendo enviados para salvar licitação:', {
+      licitacaoId: editingLicitacao?.id,
+      itens: itensParaEnviar.map(item => ({
+        id: item.id,
+        codigo_item: item.codigo_item,
+        custo_unitario: item.custo_unitario,
+        custo_total: item.custo_total,
+        quantidade: item.quantidade
+      }))
+    });
 
     createLicitacaoMutation.mutate(licitacaoData);
   };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { contratoService, licitacaoService } from '../services/api';
+import { contratoService, licitacaoService, clienteService } from '../services/api';
 import { Contrato, ContratoCreate, ContratoUpdate, Licitacao } from '../types';
 import { Plus, Edit, Trash2, Search, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,6 +18,7 @@ const Contratos: React.FC = () => {
   const [editingContrato, setEditingContrato] = useState<Contrato | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [clienteFilter, setClienteFilter] = useState<number | ''>('');
   const [selectedLicitacao, setSelectedLicitacao] = useState<Licitacao | null>(null);
   const [viewingItem, setViewingItem] = useState<any>(null);
   const [showItemModal, setShowItemModal] = useState(false);
@@ -35,14 +36,25 @@ const Contratos: React.FC = () => {
     status: 'ATIVO'
   });
 
+  // Buscar clientes para filtro (apenas para admin)
+  const { data: clientesData = [] } = useQuery(
+    'clientes',
+    () => clienteService.list(),
+    { enabled: user?.is_admin }
+  );
+
+  // Extrair clientes da resposta (pode ser array direto ou objeto paginado)
+  const clientes = Array.isArray(clientesData) ? clientesData : (clientesData.data || []);
+
   // Buscar contratos com paginação
   const { data: contratosData, isLoading, error } = useQuery(
-    ['contratos', currentPage, itemsPerPage, searchTerm, statusFilter],
+    ['contratos', currentPage, itemsPerPage, searchTerm, statusFilter, clienteFilter],
     () => contratoService.list({
       page: currentPage,
       limit: itemsPerPage,
       search: searchTerm || undefined,
-      status: statusFilter || undefined
+      status: statusFilter || undefined,
+      cliente_id: clienteFilter || undefined
     }),
     {
       enabled: !!user,
@@ -278,7 +290,7 @@ const Contratos: React.FC = () => {
   // Reset da página quando filtros mudarem
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+  }, [searchTerm, statusFilter, clienteFilter]);
 
   // Abrir modal para criar novo contrato
   const handleNewContrato = () => {
@@ -508,6 +520,22 @@ const Contratos: React.FC = () => {
               <option value="ENCERRADO">Encerrado</option>
             </select>
           </div>
+          {user?.is_admin && (
+            <div className="w-full md:w-48">
+              <select
+                value={clienteFilter}
+                onChange={(e) => setClienteFilter(e.target.value ? Number(e.target.value) : '')}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="">Todos os clientes</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>
+                    {cliente.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 

@@ -112,6 +112,22 @@ const Pedidos: React.FC = () => {
     carregarDados();
   }, [filtroStatus, filtroCliente, currentPage, itemsPerPage]);
 
+  // 🎯 NOVO: Definir filtroCliente automaticamente para usuários não-admin
+  useEffect(() => {
+    console.log('🔍 DEBUG Frontend: useEffect user executado - user:', user);
+    console.log('🔍 DEBUG Frontend: user.is_admin:', user?.is_admin);
+    console.log('🔍 DEBUG Frontend: user.cliente_id:', user?.cliente_id);
+    if (user && !user.is_admin && user.cliente_id) {
+      console.log('🔍 DEBUG Frontend: Definindo filtroCliente automaticamente para usuário normal:', user.cliente_id);
+      setFiltroCliente(user.cliente_id);
+    } else if (user && user.is_admin) {
+      console.log('🔍 DEBUG Frontend: Usuário é admin - mantendo filtroCliente vazio');
+      setFiltroCliente('');
+    } else {
+      console.log('🔍 DEBUG Frontend: Usuário não tem cliente_id ou é null');
+    }
+  }, [user]);
+
   // Funções de paginação
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -176,8 +192,21 @@ const Pedidos: React.FC = () => {
     try {
       setLoading(true);
       
+      console.log('🔍 DEBUG Frontend: carregarDados executado');
+      console.log('🔍 DEBUG Frontend: user:', user);
+      console.log('🔍 DEBUG Frontend: filtroCliente:', filtroCliente);
+      
       // Carregar pedidos com paginação
       try {
+        console.log('🔍 DEBUG Frontend: Carregando pedidos com filtros:', {
+          page: currentPage,
+          limit: itemsPerPage,
+          status: filtroStatus || undefined,
+          cliente_id: filtroCliente || undefined,
+          filtroCliente: filtroCliente,
+          isAdmin: user?.is_admin
+        });
+        
         const pedidosData = await pedidoService.list({
           page: currentPage,
           limit: itemsPerPage,
@@ -185,18 +214,23 @@ const Pedidos: React.FC = () => {
           cliente_id: filtroCliente || undefined
         });
         
+        console.log('🔍 DEBUG Frontend: Resposta recebida:', pedidosData);
+        
         // Verificar se a resposta tem formato paginado ou é um array direto
         if (pedidosData && typeof pedidosData === 'object' && 'data' in pedidosData) {
           // Formato paginado
+          console.log('🔍 DEBUG Frontend: Formato paginado - pedidos:', pedidosData.data?.length || 0);
           setPedidos(pedidosData.data as PedidoWithDetails[]);
           setTotalItems(pedidosData.total || 0);
           setTotalPages(pedidosData.total_pages || 1);
         } else if (Array.isArray(pedidosData)) {
           // Formato array direto (fallback)
+          console.log('🔍 DEBUG Frontend: Formato array - pedidos:', (pedidosData as any[]).length);
           setPedidos(pedidosData as PedidoWithDetails[]);
           setTotalItems((pedidosData as PedidoWithDetails[]).length);
           setTotalPages(1);
         } else {
+          console.log('🔍 DEBUG Frontend: Resposta inválida ou vazia');
           setPedidos([]);
           setTotalItems(0);
           setTotalPages(1);
@@ -237,8 +271,23 @@ const Pedidos: React.FC = () => {
       // Carregar clientes (sempre necessário para exibir informações)
       try {
         const clientesData = await clienteService.list();
-        setClientes(clientesData.data || []);
+        console.log('🔍 DEBUG Frontend: Clientes carregados:', clientesData);
+        
+        // Verificar se a resposta tem formato paginado ou é um array direto
+        let clientesArray: Cliente[] = [];
+        if (Array.isArray(clientesData)) {
+          // Formato array direto (backend atual)
+          clientesArray = clientesData;
+        } else if (clientesData && typeof clientesData === 'object' && 'data' in clientesData) {
+          // Formato paginado
+          clientesArray = clientesData.data || [];
+        }
+        
+        setClientes(clientesArray);
+        console.log('🔍 DEBUG Frontend: Clientes definidos no estado:', clientesArray);
+        console.log('🔍 DEBUG Frontend: Quantidade de clientes:', clientesArray.length);
       } catch (error: any) {
+        console.error('🔍 DEBUG Frontend: Erro ao carregar clientes:', error);
         setClientes([]);
       }
     } catch (error) {
@@ -1139,7 +1188,21 @@ const Pedidos: React.FC = () => {
               <div className="bg-gray-50 p-3 rounded-lg">
                 <h4 className="font-medium text-gray-900 text-sm mb-2">Cliente</h4>
                 <p className="text-gray-700 text-sm">
-                  {clientes.find(c => c.id === pedido.licitacao.cliente_id)?.nome || 'N/A'}
+                  {(() => {
+                    // Aguardar clientes serem carregados
+                    if (clientes.length === 0) {
+                      return 'Carregando...';
+                    }
+                    
+                    const cliente = clientes.find(c => c.id === pedido.licitacao.cliente_id);
+                    console.log('🔍 DEBUG Frontend: Buscando cliente para pedido:', {
+                      pedidoId: pedido.id,
+                      clienteId: pedido.licitacao.cliente_id,
+                      clientes: clientes.map(c => ({ id: c.id, nome: c.nome })),
+                      clienteEncontrado: cliente
+                    });
+                    return cliente?.nome || 'N/A';
+                  })()}
                 </p>
               </div>
 
@@ -1898,7 +1961,12 @@ const Pedidos: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-sm font-medium text-gray-500">Cliente:</span>
-                      <p className="text-sm text-gray-900">{clientes.find(c => c.id === viewingPedido.licitacao.cliente_id)?.nome || 'N/A'}</p>
+                      <p className="text-sm text-gray-900">
+                        {clientes.length === 0 
+                          ? 'Carregando...' 
+                          : clientes.find(c => c.id === viewingPedido.licitacao.cliente_id)?.nome || 'N/A'
+                        }
+                      </p>
                     </div>
                   </div>
                 </div>

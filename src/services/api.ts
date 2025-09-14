@@ -578,13 +578,15 @@ export const contratoService = {
     page?: number, 
     limit?: number,
     search?: string,
-    status?: string
+    status?: string,
+    cliente_id?: number
   }): Promise<{ data: Contrato[], total: number, page: number, limit: number, total_pages: number }> => {
     const params: any = {};
     if (filters?.page) params.page = filters.page;
     if (filters?.limit) params.limit = filters.limit;
     if (filters?.search) params.search = filters.search;
     if (filters?.status) params.status = filters.status;
+    if (filters?.cliente_id) params.cliente_id = filters.cliente_id;
     
     const response = await api.get('/contratos/', { params });
     return response.data;
