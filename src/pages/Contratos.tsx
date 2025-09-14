@@ -77,11 +77,32 @@ const Contratos: React.FC = () => {
     {
       enabled: !!user,
       refetchOnWindowFocus: false,
+      onSuccess: (data) => {
+        console.log('Licitações GANHO carregadas:', data);
+      },
+      onError: (error) => {
+        console.error('Erro ao carregar licitações GANHO:', error);
+      }
     }
   );
 
   // Extrair dados da resposta paginada
-  const licitacoes = licitacoesData?.data || [];
+  // Verificar se é uma resposta paginada ou array direto
+  let licitacoes: Licitacao[] = [];
+  
+  if (licitacoesData) {
+    if (Array.isArray(licitacoesData)) {
+      // Resposta é um array direto
+      licitacoes = licitacoesData;
+      console.log('Licitações (array direto):', licitacoes.length);
+    } else if (licitacoesData.data && Array.isArray(licitacoesData.data)) {
+      // Resposta é paginada
+      licitacoes = licitacoesData.data;
+      console.log('Licitações (paginada):', licitacoes.length);
+    }
+  }
+  
+  console.log('Licitações finais para seleção:', licitacoes.length);
 
   // Buscar estatísticas
   const { data: stats } = useQuery(
